@@ -36,10 +36,13 @@ class RedNetRNNModule(nn.Module):
         return rnn_out.view(batch_size, seq_len, c_lat, h_lat, w_lat)
 
 class SeqRedNet(nn.Module):
-    def __init__(self, module, num_classes=40, pretrained=False):
+    def __init__(self, module, num_classes=40, freeze_encoder=True, pretrained=False):
         super().__init__()
         self.rednet = RedNet(num_classes, pretrained=pretrained)
         self.module = module
+
+        if freeze_encoder:
+            self.rednet.freeze_encoder()
 
     def forward(self, rgb, depth, hidden=None):
         """

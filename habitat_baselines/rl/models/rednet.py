@@ -147,6 +147,19 @@ class RedNet(nn.Module):
         )
         return layers
 
+    def freeze_encoder(self):
+        encoder_modules = [
+            self.conv1, self.bn1, self.conv1_d, self.bn1_d,
+            self.relu, self.maxpool,
+            self.layer1, self.layer1_d,
+            self.layer2, self.layer2_d,
+            self.layer3, self.layer3_d,
+            self.layer4, self.layer4_d,
+        ]
+        for enc_mod in encoder_modules:
+            for param in enc_mod.parameters():
+                param.requires_grad = False
+
     def _load_resnet_pretrained(self):
         pretrain_dict = model_zoo.load_url(model_urls['resnet50'])
         model_dict = {}

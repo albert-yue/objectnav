@@ -25,6 +25,8 @@ def build_parser():
     parser = argparse.ArgumentParser(description='RedNet+RNN')
     parser.add_argument('--data-dir', default='rednet_data/', metavar='DIR',
                         help='path to trajectory dataset')
+    parser.add_argument('--freeze-rednet', action='store_true', default=True,
+                        help='freeze rednet')
     parser.add_argument('--seq-len', default=500, type=int,
                         help='length of sequences')
     parser.add_argument('-b', '--batch-size', default=10, type=int,
@@ -219,7 +221,7 @@ num_train = len(train_data)
 # print('Dataset made')
 # print('reserved | allocated:', torch.cuda.memory_reserved(0), '|', torch.cuda.memory_allocated(0))
 
-model = SeqRedNet(RedNetRNNModule(), pretrained=False)
+model = SeqRedNet(RedNetRNNModule(), freeze_encoder=args.freeze_rednet, pretrained=False)
 
 # Load RedNet checkpoint
 # if device.type == 'cuda':
@@ -248,8 +250,12 @@ model.to(device)
 loss_fn = CrossEntropyLoss2d()
 loss_fn.to(device)
 
-optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
-                            momentum=args.momentum, weight_decay=args.weight_decay)
+if args.freeze_rednet:
+    optimizer = torch.optim.SGD(model.module.parameters(), lr=args.lr,
+                                momentum=args.momentum, weight_decay=args.weight_decay)
+else:
+    optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
+                                momentum=args.momentum, weight_decay=args.weight_decay)
 
 global_step = 0
 
