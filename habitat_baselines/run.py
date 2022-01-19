@@ -52,7 +52,7 @@ def get_parser():
         "--base-config",
         "-b",
         type=str,
-        default="/srv/flash1/jye72/projects/embodied-recall/habitat_baselines/config/objectnav/obj_base.on.yaml",
+        default="habitat_baselines/config/objectnav/obj_base.on.yaml",
         help="path to universal config (for most of your experiments)"
     )
 
@@ -128,7 +128,7 @@ def get_parser():
 
 def main():
     # Change dir so that no matter where we invoke this script (i.e. manually via CLI or from another script like `eval_cron`), imports are correct
-    os.chdir('/srv/flash1/jye72/projects/embodied-recall')
+    os.chdir('/home/gridsan/ayue/joel_aux_objectnav')
     parser = get_parser()
     args = parser.parse_args()
     run_exp(**vars(args))
@@ -230,7 +230,7 @@ def run_exp(
         map_cfg.MAP_RESOLUTION = 1200
         log_diagnostics = []
 
-        eval_stats_dir = osp.join(f'/srv/share/jye72/objectnav_eval/', variant_name)
+        eval_stats_dir = osp.join(f'objectnav_eval/', variant_name)
         if eval_viz:
             config.TEST_EPISODE_COUNT = 30
             config.VIDEO_OPTION = ["disk"]
@@ -239,7 +239,7 @@ def run_exp(
             log_diagnostics = [Diagnostics.basic, Diagnostics.episode_info]
         if record_all:
             # will carry over video option from eval_viz
-            eval_stats_dir = osp.join(f'/srv/share/jye72/objectnav_detailed/', variant_name)
+            eval_stats_dir = osp.join(f'objectnav_detailed/', variant_name)
             config.TEST_EPISODE_COUNT = 300
             # config.TEST_EPISODE_COUNT = 22
 
@@ -248,7 +248,7 @@ def run_exp(
             else:
                 config.EVAL.SPLIT = f"val_{config.TEST_EPISODE_COUNT}"
 
-            config.VIDEO_DIR = osp.join("/srv/share/jye72/vis/videos/objectnav_detailed/", variant_name)
+            config.VIDEO_DIR = osp.join("objectnav_detailed/", variant_name)
 
             config.TASK_CONFIG.TASK.MEASUREMENTS.append("GOAL_OBJECT_VISIBLE_PIXELS")
             config.TASK_CONFIG.TASK.MEASUREMENTS.append("REGION_LEVEL_INFO")

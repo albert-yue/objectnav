@@ -51,7 +51,7 @@ _C.EVAL.USE_CKPT_CONFIG = True
 _C.EVAL.DETERMINISTIC = False
 
 _C.EVAL.PROJECT_OUT = -1 # Project time to a specific timestep. It's not quite straightforwrd though, there's some scaling factor.
-_C.EVAL.PROJECTION_PATH = '/srv/share/jye72/base-full_timesteps.pth' # Project time to a specific timestep. It's not quite straightforwrd though, there's some scaling factor.
+_C.EVAL.PROJECTION_PATH = 'weights/base-full_timesteps.pth' # Project time to a specific timestep. It's not quite straightforwrd though, there's some scaling factor.
 
 _C.EVAL.restrict_gps = True
 
@@ -168,7 +168,7 @@ _C.RL.PPO.POLICY.FULL_RESNET = False
 
 _C.RL.PPO.POLICY.use_mean_and_var = False
 _C.RL.PPO.POLICY.pretrained_encoder = False
-_C.RL.PPO.POLICY.pretrained_weights = "/srv/share/ewijmans3/resnet-18-mp3d-rgbd-100m.pth"
+_C.RL.PPO.POLICY.pretrained_weights = "weights/resnet-18-mp3d-rgbd-100m.pth"
 _C.RL.PPO.POLICY.use_cuda_streams = False
 _C.RL.PPO.POLICY.restrict_gps = True # Legacy
 _C.RL.PPO.POLICY.embed_actions = False
@@ -214,7 +214,7 @@ _C.RL.PPO.POLICY.BELIEFS.POLICY_INDEX = 0 # Used for comms policy
 
 _C.RL.PPO.POLICY.USE_SEMANTICS = False # Feed semantic to policy.
 _C.RL.PPO.POLICY.EVAL_GT_SEMANTICS = False # Experimental - we'll keep semantics on at test as well, just to see. Otherwise, default to rednet ckpt (specified below)
-_C.RL.PPO.POLICY.EVAL_SEMANTICS_CKPT = "/srv/share/jye72/rednet/rednet_semmap_mp3d_tuned.pth"
+_C.RL.PPO.POLICY.EVAL_SEMANTICS_CKPT = "weights/rednet_semmap_mp3d_tuned.pth"
 _C.RL.PPO.POLICY.EVAL_SEMANTICS_STABILIZE = False # Squash and upsample
 _C.RL.PPO.POLICY.EVAL_SEMANTICS_MUTE = False # Set to void
 

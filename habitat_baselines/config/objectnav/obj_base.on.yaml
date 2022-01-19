@@ -1,7 +1,7 @@
-CHECKPOINT_FOLDER: "/srv/share/jye72/objectnav/"
+CHECKPOINT_FOLDER: "/home/gridsan/ayue/joel_aux_objectnav/weights/"
 LOG_FILE: "runs/objectnav/"
 TENSORBOARD_DIR: "tb/objectnav/"
-VIDEO_DIR: "/srv/share/jye72/vis/videos/objectnav/"
+VIDEO_DIR: "/home/gridsan/ayue/joel_aux_objectnav/vis/videos/objectnav/"
 
 BASE_TASK_CONFIG_PATH: "configs/tasks/objectnav_mp3d.yaml"
 SIMULATOR_GPU_ID: 0
@@ -38,7 +38,7 @@ RL:
       name: "BeliefPolicy"
       use_mean_and_var: True
       pretrained_encoder: True
-      pretrained_weights: "/srv/share/ewijmans3/resnet-18-mp3d-rgbd-100m.pth"
+      pretrained_weights: "/home/gridsan/ayue/joel_aux_objectnav/weights/resnet-18-mp3d-rgbd-100m.pth"
       TRANSFORMER:
         num_heads: 4
         num_layers: 1

@@ -588,7 +588,7 @@ class PPOTrainer(BaseRLTrainer):
         batch = batch_obs(observations, device=self.device)
         if self.semantic_predictor is not None:
             batch["semantic"] = self.semantic_predictor(batch["rgb"], batch["depth"])
-            if ppo_cfg.POLICY.EVAL_SEMANTICS_CKPT == "/srv/share/jye72/rednet/rednet_semmap_mp3d_40.pth":
+            if ppo_cfg.POLICY.EVAL_SEMANTICS_CKPT == "weights/rednet_semmap_mp3d_40.pth":
                 batch["semantic"] -= 1
         batch = apply_obs_transforms_batch(batch, self.obs_transforms)
 
@@ -934,7 +934,7 @@ class PPOTrainer(BaseRLTrainer):
         self.envs.close()
 
     def project_out(
-        self, states, projection_path='/srv/share/jye72/base-full_timesteps.pth'
+        self, states, projection_path='weights/base-full_timesteps.pth'
     ):
         r"""
         # states l x b x k x h
@@ -1373,7 +1373,7 @@ class PPOTrainer(BaseRLTrainer):
         if self.semantic_predictor is not None:
             # batch["gt_semantic"] = batch["semantic"]
             batch["semantic"] = self.semantic_predictor(batch["rgb"], batch["depth"])
-            if ppo_cfg.POLICY.EVAL_SEMANTICS_CKPT == "/srv/share/jye72/rednet/rednet_semmap_mp3d_40.pth":
+            if ppo_cfg.POLICY.EVAL_SEMANTICS_CKPT == "weights/rednet_semmap_mp3d_40.pth":
                 batch["semantic"] -= 1
 
         batch = apply_obs_transforms_batch(batch, self.obs_transforms)
@@ -1510,7 +1510,7 @@ class PPOTrainer(BaseRLTrainer):
             if self.semantic_predictor is not None:
                 # batch["gt_semantic"] = batch["semantic"]
                 batch["semantic"] = self.semantic_predictor(batch["rgb"], batch["depth"])
-                if ppo_cfg.POLICY.EVAL_SEMANTICS_CKPT == "/srv/share/jye72/rednet/rednet_semmap_mp3d_40.pth":
+                if ppo_cfg.POLICY.EVAL_SEMANTICS_CKPT == "weights/rednet_semmap_mp3d_40.pth":
                     batch["semantic"] -= 1
                 if len(self.config.VIDEO_OPTION) > 0:
                     for i in range(batch["semantic"].size(0)):
