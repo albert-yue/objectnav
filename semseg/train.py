@@ -8,18 +8,19 @@ import argparse
 import time
 import datetime
 
-import numpy as np
-import skimage.transform
 import torch
 from torch import nn
 import torch.nn.functional as F 
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import LambdaLR
-import torchvision
+import torchvision.transforms
 from tensorboardX import SummaryWriter
 
 from habitat_baselines.rl.models.rednet_rnn import SeqRedNet, RedNetRNNModule
 from semseg.dataset import TrajectoryDataset
+from semseg.loss import CrossEntropyLoss2d
+from semseg.transforms import ToTensor, Normalize
+from semseg.utils import print_log, save_ckpt, load_ckpt
 
 
 def build_parser():
@@ -68,141 +69,6 @@ def build_parser():
                         metavar='N', help='save epoch frequency (default: 5)')
     return parser
 
-
-# Transforms on torch.*Tensor
-class Normalize(object):
-    def __call__(self, sample):
-        rgb, depth = sample['rgb'], sample['depth']
-        rgb = rgb / 255
-        rgb = torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                                 std=[0.229, 0.224, 0.225])(rgb)
-        depth = torchvision.transforms.Normalize(mean=[0.213],
-                                                 std=[0.285])(depth)
-        sample['rgb'] = rgb
-        sample['depth'] = depth
-
-        return sample
-
-
-class Interpolate:
-    """Interpolate up 240x320 for now"""
-
-    def __call__(self, sample):
-        return {'rgb': F.interpolate(sample['rgb'], (480, 640), mode='bilinear'),
-                'depth': F.interpolate(sample['depth'], (480, 640), mode='nearest'),
-                'semantic': F.interpolate(sample['semantic'].unsqueeze(1), (480, 640), mode='nearest').squeeze(1),
-                'semantic2': F.interpolate(sample['semantic2'].unsqueeze(1), (240, 320), mode='nearest').squeeze(1),
-                'semantic3': F.interpolate(sample['semantic3'].unsqueeze(1), (120, 160), mode='nearest').squeeze(1),
-                'semantic4': F.interpolate(sample['semantic4'].unsqueeze(1), (60, 80), mode='nearest').squeeze(1),
-                'semantic5': F.interpolate(sample['semantic5'].unsqueeze(1), (30, 40), mode='nearest').squeeze(1),
-                'actions': sample['actions']}
-
-
-class ToTensor(object):
-    """Convert ndarrays in sample to Tensors."""
-
-    def __call__(self, sample):
-        rgb, depth, semantic, actions = sample['rgb'], sample['depth'], sample['semantic'], sample['actions']
-
-        # Generate different semantic scales
-        l, h, w = semantic.shape
-        semantic = semantic.transpose((1, 2, 0))
-        semantic2 = skimage.transform.resize(
-            semantic, (semantic.shape[0] // 2, semantic.shape[1] // 2),
-            order=0, mode='reflect', preserve_range=True
-        ).transpose((2, 0, 1))
-        semantic3 = skimage.transform.resize(
-            semantic, (semantic.shape[0] // 4, semantic.shape[1] // 4),
-            order=0, mode='reflect', preserve_range=True
-        ).transpose((2, 0, 1))
-        semantic4 = skimage.transform.resize(
-            semantic, (semantic.shape[0] // 8, semantic.shape[1] // 8),
-            order=0, mode='reflect', preserve_range=True
-        ).transpose((2, 0, 1))
-        semantic5 = skimage.transform.resize(
-            semantic, (semantic.shape[0] // 16, semantic.shape[1] // 16),
-            order=0, mode='reflect', preserve_range=True
-        ).transpose((2, 0, 1))
-        semantic = semantic.transpose((2, 0, 1))
-
-        # swap color axis because
-        # numpy image: L x H x W x C
-        # torch image: L x C X H X W
-        rgb = rgb.transpose(0, 3, 1, 2)
-        depth = depth.transpose(0, 3, 1, 2)
-        return {'rgb': torch.from_numpy(rgb).float(),
-                'depth': torch.from_numpy(depth).float(),
-                'semantic': torch.from_numpy(semantic).float(),
-                'semantic2': torch.from_numpy(semantic2).float(),
-                'semantic3': torch.from_numpy(semantic3).float(),
-                'semantic4': torch.from_numpy(semantic4).float(),
-                'semantic5': torch.from_numpy(semantic5).float(),
-                'actions': torch.from_numpy(actions).long()}
-
-
-def print_log(global_step, epoch, local_count, count_inter, dataset_size, loss, time_inter):
-    print('Step: {:>5} Train Epoch: {:>3} [{:>4}/{:>4} ({:3.1f}%)]    '
-          'Loss: {:.6f} [{:.2f}s every {:>4} data]'.format(
-        global_step, epoch, local_count, dataset_size,
-        100. * local_count / dataset_size, loss, time_inter, count_inter))
-
-
-def save_ckpt(ckpt_dir, model, optimizer, global_step, epoch, local_count, num_train):
-    # usually this happens only on the start of a epoch
-    epoch_float = epoch + (local_count / num_train)
-    state = {
-        'global_step': global_step,
-        'epoch': epoch_float,
-        'state_dict': model.state_dict(),
-        'optimizer': optimizer.state_dict(),
-    }
-    ckpt_model_filename = "ckpt_epoch_{:0.2f}.pth".format(epoch_float)
-    path = os.path.join(ckpt_dir, ckpt_model_filename)
-    torch.save(state, path)
-    print('{:>2} has been successfully saved'.format(path))
-
-
-def load_ckpt(model, optimizer, model_file, device):
-    if os.path.isfile(model_file):
-        print("=> loading checkpoint '{}'".format(model_file))
-        if device.type == 'cuda':
-            checkpoint = torch.load(model_file)
-        else:
-            checkpoint = torch.load(model_file, map_location=lambda storage, loc: storage)
-        model.load_state_dict(checkpoint['state_dict'])
-        if optimizer:
-            optimizer.load_state_dict(checkpoint['optimizer'])
-        print("=> loaded checkpoint '{}' (epoch {})"
-              .format(model_file, checkpoint['epoch']))
-        step = checkpoint['global_step']
-        epoch = checkpoint['epoch']
-        return step, epoch
-    else:
-        print("=> no checkpoint found at '{}'".format(model_file))
-        os._exit(0)
-
-
-class CrossEntropyLoss2d(nn.Module):
-    def __init__(self):
-        super(CrossEntropyLoss2d, self).__init__()
-        self.ce_loss = nn.CrossEntropyLoss()
-
-    def forward(self, inputs_scales, targets_scales):
-        losses = []
-        for inputs, targets in zip(inputs_scales, targets_scales):
-            _, _, c, h, w = inputs.size()
-            inputs = inputs.view(-1, c, h, w)
-            targets = targets.view(-1, h, w)
-
-            mask = targets > 0
-            mask_neg = targets < 0
-            targets_m = targets.clone()
-            targets_m[mask] -= 1
-            targets_m[mask_neg] += c
-            loss_all = self.ce_loss(inputs, targets_m.long())
-            losses.append(torch.sum(torch.masked_select(loss_all, mask)) / torch.sum(mask.float()))
-        total_loss = sum(losses)
-        return total_loss
 
 print('Start time:', datetime.datetime.now())
 parser = build_parser()
@@ -326,4 +192,3 @@ save_ckpt(args.ckpt_dir, model, optimizer, global_step, args.epochs, 0, num_trai
 
 print("Training completed.")
 print(datetime.datetime.now())
-
