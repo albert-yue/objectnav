@@ -1,5 +1,5 @@
 """
-Training script for RedNet-RNN
+Training script for Sequential RedNet
 
 Based off https://github.com/JindongJiang/RedNet
 """
@@ -17,7 +17,7 @@ from torch.optim.lr_scheduler import LambdaLR
 import torchvision
 from tensorboardX import SummaryWriter
 
-from habitat_baselines.rl.models.rednet_rnn import RedNetRNN
+from habitat_baselines.rl.models.rednet_rnn import SeqRedNet, RedNetRNNModule
 from semseg.dataset import TrajectoryDataset
 
 
@@ -219,7 +219,7 @@ num_train = len(train_data)
 # print('Dataset made')
 # print('reserved | allocated:', torch.cuda.memory_reserved(0), '|', torch.cuda.memory_allocated(0))
 
-model = RedNetRNN(pretrained=False)
+model = SeqRedNet(RedNetRNNModule(), pretrained=False)
 
 # Load RedNet checkpoint
 # if device.type == 'cuda':

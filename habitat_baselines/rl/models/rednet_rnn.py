@@ -7,16 +7,36 @@ import torch.nn.functional as F
 from habitat_baselines.rl.models.rednet import RedNet, BatchNormalize
 
 
-class RedNetRNN(nn.Module):
-    def __init__(self, num_classes=40, pretrained=False):
+class RedNetRNNModule(nn.Module):
+    def __init__(self):
         super().__init__()
-        self.rednet = RedNet(num_classes, pretrained=pretrained)
         self.lat2rnn_conv = nn.Conv2d(512, 8, kernel_size=1)
         self.lat2rnn_lin = nn.Linear(8*15*20, 1024)
         self.rnn = nn.LSTM(1024, 1024, batch_first=True)
         self.rnn2lat_lin = nn.Linear(1024, 8*15*20)
         self.rnn2lat_conv = nn.ConvTranspose2d(8, 512, kernel_size=1)
-    
+
+    def forward(self, features, hidden=None):
+        '''
+        features (Tensor): size (batch x seq_len x channels x height x width)
+        '''
+        batch_size, seq_len, c_lat, h_lat, w_lat = features.size()
+        
+        rnn_input = self.lat2rnn_conv(features.view(-1, c_lat, h_lat, w_lat))
+        rnn_input = self.lat2rnn_lin(rnn_input.view(batch_size, seq_len, -1))
+        
+        rnn_out, hidden = self.rnn(rnn_input, hidden)
+        
+        rnn_out = self.rnn2lat_lin(rnn_out)
+        rnn_out = self.rnn2lat_conv(rnn_out.view(-1, 8, h_lat, w_lat))
+        return rnn_out.view(batch_size, seq_len, c_lat, h_lat, w_lat)
+
+class SeqRedNet(nn.Module):
+    def __init__(self, module, num_classes=40, pretrained=False):
+        super().__init__()
+        self.rednet = RedNet(num_classes, pretrained=pretrained)
+        self.module = module
+
     def forward(self, rgb, depth, hidden=None):
         """
         image dims are batch_size x length x channels x height x width
@@ -27,12 +47,9 @@ class RedNetRNN(nn.Module):
         features_encoder = fuses[-1]  # latent size is batch_size*seq_len x c_lat x h_lat x w_lat
         fuses = fuses[:-1]
 
-        rnn_input = self.lat2rnn_conv(features_encoder)
-        _, c_lat, h_lat, w_lat = rnn_input.size()
-        rnn_input = self.lat2rnn_lin(rnn_input.view(batch_size, seq_len, -1))
-        rnn_out, hidden = self.rnn(rnn_input, hidden)
-        rnn_out = self.rnn2lat_lin(rnn_out)
-        rnn_out = self.rnn2lat_conv(rnn_out.view(-1, c_lat, h_lat, w_lat))
+        _, c_lat, h_lat, w_lat = features_encoder.size()
+        rnn_out = self.module(features_encoder.view(batch_size, seq_len, c_lat, h_lat, w_lat), hidden=hidden)
+        rnn_out = rnn_out.view(-1, c_lat, h_lat, w_lat)
 
         # We only need predictions.
         # features_encoder = fuses[-1]
@@ -52,10 +69,10 @@ class RedNetRNN(nn.Module):
         scores, *_ = self.rednet.forward_upsample(*fuses, rnn_out)
         return scores.view(batch_size, seq_len, -1, h, w), hidden
 
-class RedNetRNNResizeWrapper(nn.Module):
+class SeqRedNetResizeWrapper(nn.Module):
     def __init__(self, device, resize=True, stabilize=False):
         super().__init__()
-        self.rednet_rnn = RedNetRNN()
+        self.rednet_rnn = SeqRedNet(RedNetRNNModule())
         self.rednet_rnn.eval()
         self.semmap_rgb_norm = BatchNormalize(
             mean=[0.493, 0.468, 0.438],
@@ -116,11 +133,11 @@ class RedNetRNNResizeWrapper(nn.Module):
 
         return pred.long().squeeze(2), hidden
 
-def load_rednet_rnn(device, ckpt="", resize=True, stabilize=False):
+def load_rednet_seq(device, ckpt="", resize=True, stabilize=False):
     if not os.path.isfile(ckpt):
         raise Exception(f"invalid path {ckpt} provided for rednet weights")
 
-    model = RedNetRNNResizeWrapper(device, resize=resize, stabilize=stabilize).to(device)
+    model = SeqRedNetResizeWrapper(device, resize=resize, stabilize=stabilize).to(device)
 
     print("=> loading RedNet checkpoint '{}'".format(ckpt))
     if device.type == 'cuda':
