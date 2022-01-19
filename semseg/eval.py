@@ -1,7 +1,5 @@
 """
-Training script for Sequential RedNet
-
-Based off https://github.com/JindongJiang/RedNet
+Eval script for Sequential RedNet
 """
 import os
 import argparse
@@ -27,16 +25,10 @@ def build_parser():
     parser = argparse.ArgumentParser(description='RedNet+RNN')
     parser.add_argument('--data-dir', default='rednet_data/', metavar='DIR',
                         help='path to trajectory dataset')
-    parser.add_argument('--freeze-rednet', action='store_true', default=True,
-                        help='freeze rednet')
     parser.add_argument('--seq-len', default=500, type=int,
                         help='length of sequences')
     parser.add_argument('-b', '--batch-size', default=10, type=int,
                         metavar='N', help='mini-batch size (default: 10)')
-    parser.add_argument('--epochs', default=1500, type=int, metavar='N',
-                        help='number of total epochs to run (default: 1500)')
-    parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
-                        help='manual epoch number (useful on restarts)')
     parser.add_argument('--cuda', action='store_true', default=False,
                         help='enables CUDA training')
     parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
@@ -44,15 +36,6 @@ def build_parser():
 
     parser.add_argument('--ckpt', default='', type=str, metavar='PATH',
                         help='path to checkpoint to load')
-    
-    parser.add_argument('--summary-dir', default='./semseg/summary/', metavar='DIR',
-                        help='path to save summary')
-    parser.add_argument('--ckpt-dir', default='./semseg/checkpoints/', metavar='DIR',
-                        help='path to save checkpoints')
-    parser.add_argument('--print-freq', '-p', default=200, type=int,
-                        metavar='N', help='print batch frequency (default: 50)')
-    parser.add_argument('--save-epoch-freq', '-s', default=5, type=int,
-                        metavar='N', help='save epoch frequency (default: 5)')
     return parser
 
 
