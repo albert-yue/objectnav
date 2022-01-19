@@ -16,6 +16,10 @@ class RedNetRNNModule(nn.Module):
         self.rnn2lat_lin = nn.Linear(1024, 8*15*20)
         self.rnn2lat_conv = nn.ConvTranspose2d(8, 512, kernel_size=1)
 
+        # initialize final layer weights to 0, to work with skip connection in SeqRedNet
+        nn.init.zeros_(self.rnn2lat_lin.weight)
+        nn.init.zeros_(self.rnn2lat_lin.bias)
+
     def forward(self, features, hidden=None):
         '''
         features (Tensor): size (batch x seq_len x channels x height x width)
@@ -48,8 +52,11 @@ class SeqRedNet(nn.Module):
         fuses = fuses[:-1]
 
         _, c_lat, h_lat, w_lat = features_encoder.size()
-        rnn_out = self.module(features_encoder.view(batch_size, seq_len, c_lat, h_lat, w_lat), hidden=hidden)
-        rnn_out = rnn_out.view(-1, c_lat, h_lat, w_lat)
+        module_out = self.module(features_encoder.view(batch_size, seq_len, c_lat, h_lat, w_lat), hidden=hidden)
+        module_out = module_out.view(-1, c_lat, h_lat, w_lat)
+
+        # Skip connection around intermediate module
+        final_latent = module_out + features_encoder
 
         # We only need predictions.
         # features_encoder = fuses[-1]
@@ -58,7 +65,7 @@ class SeqRedNet(nn.Module):
         # return features_encoder, features_lastlayer, scores
         
         if self.training:
-            scores, _, out2, out3, out4, out5 = self.rednet.forward_upsample(*fuses, rnn_out)
+            scores, _, out2, out3, out4, out5 = self.rednet.forward_upsample(*fuses, final_latent)
             return scores.view(batch_size, seq_len, -1, h, w), \
                    out2.view(batch_size, seq_len, -1, out2.size(2), out2.size(3)), \
                    out3.view(batch_size, seq_len, -1, out3.size(2), out3.size(3)), \
@@ -66,7 +73,7 @@ class SeqRedNet(nn.Module):
                    out5.view(batch_size, seq_len, -1, out5.size(2), out5.size(3)), \
                    hidden
 
-        scores, *_ = self.rednet.forward_upsample(*fuses, rnn_out)
+        scores, *_ = self.rednet.forward_upsample(*fuses, final_latent)
         return scores.view(batch_size, seq_len, -1, h, w), hidden
 
 class SeqRedNetResizeWrapper(nn.Module):
