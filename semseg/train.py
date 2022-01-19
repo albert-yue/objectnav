@@ -6,6 +6,7 @@ Based off https://github.com/JindongJiang/RedNet
 import os
 import argparse
 import time
+import datetime
 
 import numpy as np
 import skimage.transform
@@ -93,14 +94,15 @@ class Interpolate:
                 'semantic2': F.interpolate(sample['semantic2'].unsqueeze(1), (240, 320), mode='nearest').squeeze(1),
                 'semantic3': F.interpolate(sample['semantic3'].unsqueeze(1), (120, 160), mode='nearest').squeeze(1),
                 'semantic4': F.interpolate(sample['semantic4'].unsqueeze(1), (60, 80), mode='nearest').squeeze(1),
-                'semantic5': F.interpolate(sample['semantic5'].unsqueeze(1), (30, 40), mode='nearest').squeeze(1)}
+                'semantic5': F.interpolate(sample['semantic5'].unsqueeze(1), (30, 40), mode='nearest').squeeze(1),
+                'actions': sample['actions']}
 
 
 class ToTensor(object):
     """Convert ndarrays in sample to Tensors."""
 
     def __call__(self, sample):
-        rgb, depth, semantic = sample['rgb'], sample['depth'], sample['semantic']
+        rgb, depth, semantic, actions = sample['rgb'], sample['depth'], sample['semantic'], sample['actions']
 
         # Generate different semantic scales
         l, h, w = semantic.shape
@@ -134,7 +136,8 @@ class ToTensor(object):
                 'semantic2': torch.from_numpy(semantic2).float(),
                 'semantic3': torch.from_numpy(semantic3).float(),
                 'semantic4': torch.from_numpy(semantic4).float(),
-                'semantic5': torch.from_numpy(semantic5).float()}
+                'semantic5': torch.from_numpy(semantic5).float(),
+                'actions': torch.from_numpy(actions).long()}
 
 
 def print_log(global_step, epoch, local_count, count_inter, dataset_size, loss, time_inter):
@@ -201,7 +204,7 @@ class CrossEntropyLoss2d(nn.Module):
         total_loss = sum(losses)
         return total_loss
 
-
+print('Start time:', datetime.datetime.now())
 parser = build_parser()
 args = parser.parse_args()
 
@@ -265,8 +268,8 @@ if args.last_ckpt:
 lr_decay_lambda = lambda epoch: args.lr_decay_rate ** (epoch // args.lr_epoch_per_decay)
 scheduler = LambdaLR(optimizer, lr_lambda=lr_decay_lambda)
 
-print('Before training')
-print('reserved | allocated:', torch.cuda.memory_reserved(0), '|', torch.cuda.memory_allocated(0))
+# print('Before training')
+# print('reserved | allocated:', torch.cuda.memory_reserved(0), '|', torch.cuda.memory_allocated(0))
 
 for epoch in range(int(args.start_epoch), args.epochs):
     local_count = 0
@@ -277,19 +280,19 @@ for epoch in range(int(args.start_epoch), args.epochs):
                     local_count, num_train)
 
     for batch_idx, sample in enumerate(train_loader):
-        print('New batch')
+        # print('Epoch', epoch, 'Batch', batch_idx)
         optimizer.zero_grad()
                
         image = sample['rgb'].to(device)
         depth = sample['depth'].to(device)
-        print('Epoch', epoch, 'Batch', batch_idx)
-        print('reserved | allocated:', torch.cuda.memory_reserved(0), '|', torch.cuda.memory_allocated(0))
+        prev_actions = sample['actions'].to(device)
+        # print('reserved | allocated:', torch.cuda.memory_reserved(0), '|', torch.cuda.memory_allocated(0))
         target_scales = [sample[s].to(device) for s in ['semantic', 'semantic2', 'semantic3', 'semantic4', 'semantic5']]
         # print('Target sizes:', [t.size() for t in target_scales])
 
-        print('reserved | allocated:', torch.cuda.memory_reserved(0), '|', torch.cuda.memory_allocated(0))
+        # print('reserved | allocated:', torch.cuda.memory_reserved(0), '|', torch.cuda.memory_allocated(0))
 
-        *pred_scales, _ = model(image, depth)  # drops the hidden states
+        *pred_scales, _ = model(image, depth, prev_actions)  # drops the hidden states
         loss = loss_fn(pred_scales, target_scales)
         loss.backward()
         optimizer.step()
@@ -322,4 +325,5 @@ for epoch in range(int(args.start_epoch), args.epochs):
 save_ckpt(args.ckpt_dir, model, optimizer, global_step, args.epochs, 0, num_train)
 
 print("Training completed.")
+print(datetime.datetime.now())
 

@@ -25,7 +25,10 @@ test_envs = [
     'r1Q1Z4BcV1o', 'uNb9QFRL6hY'
 ]
 
-keys = ['rgb', 'depth', 'semantic', 'objectgoal', 'compass', 'gps']
+ACTIONS = ["STOP", "MOVE_FORWARD", "TURN_LEFT", "TURN_RIGHT", "LOOK_UP", "LOOK_DOWN"]
+ACTIONS_MAP = {act: i for i, act in enumerate(ACTIONS)}
+
+keys = ['rgb', 'depth', 'semantic',]# 'objectgoal', 'compass', 'gps']
 
 class TrajectoryDataset(Dataset):
     def __init__(self, data_dir, seq_len=500, transform=None, phase_train=True):
@@ -56,7 +59,10 @@ class TrajectoryDataset(Dataset):
         sample = {k: np.array(v) for k, v in observations.items()}
         
         actions = np.load(os.path.join(dir, 'actions.npy'.format(t)), allow_pickle=True)
-        sample['actions'] = actions
+        sample_actions = [0]
+        for t in range(self.seq_len-1):
+            sample_actions.append(ACTIONS_MAP[actions[t]])
+        sample['actions'] = np.array(sample_actions)
 
         if self.transform:
             sample = self.transform(sample)

@@ -8,10 +8,12 @@ from habitat_baselines.rl.models.rednet import RedNet, BatchNormalize
 
 
 class RedNetRNNModule(nn.Module):
-    def __init__(self):
+    def __init__(self, action_dim=6):
         super().__init__()
+        self.action_embed = nn.Embedding(action_dim, 6)
+
         self.lat2rnn_conv = nn.Conv2d(512, 8, kernel_size=1)
-        self.lat2rnn_lin = nn.Linear(8*15*20, 1024)
+        self.lat2rnn_lin = nn.Linear(8*15*20 + 6, 1024)
         self.rnn = nn.LSTM(1024, 1024, batch_first=True)
         self.rnn2lat_lin = nn.Linear(1024, 8*15*20)
         self.rnn2lat_conv = nn.ConvTranspose2d(8, 512, kernel_size=1)
@@ -20,14 +22,18 @@ class RedNetRNNModule(nn.Module):
         nn.init.zeros_(self.rnn2lat_lin.weight)
         nn.init.zeros_(self.rnn2lat_lin.bias)
 
-    def forward(self, features, hidden=None):
+    def forward(self, features, prev_actions, hidden=None):
         '''
         features (Tensor): size (batch x seq_len x channels x height x width)
+        prev_actions (Tensor): size (batch x seq_len)
         '''
+        action_embedding = self.action_embed(prev_actions)
+
         batch_size, seq_len, c_lat, h_lat, w_lat = features.size()
-        
+
         rnn_input = self.lat2rnn_conv(features.view(-1, c_lat, h_lat, w_lat))
-        rnn_input = self.lat2rnn_lin(rnn_input.view(batch_size, seq_len, -1))
+        rnn_input = torch.cat([rnn_input.view(batch_size, seq_len, -1), action_embedding], dim=-1)
+        rnn_input = self.lat2rnn_lin(rnn_input)
         
         rnn_out, hidden = self.rnn(rnn_input, hidden)
         
@@ -44,7 +50,7 @@ class SeqRedNet(nn.Module):
         if freeze_encoder:
             self.rednet.freeze_encoder()
 
-    def forward(self, rgb, depth, hidden=None):
+    def forward(self, rgb, depth, prev_actions, hidden=None):
         """
         image dims are batch_size x length x channels x height x width
         """
@@ -55,7 +61,8 @@ class SeqRedNet(nn.Module):
         fuses = fuses[:-1]
 
         _, c_lat, h_lat, w_lat = features_encoder.size()
-        module_out = self.module(features_encoder.view(batch_size, seq_len, c_lat, h_lat, w_lat), hidden=hidden)
+        module_out = self.module(features_encoder.view(batch_size, seq_len, c_lat, h_lat, w_lat),
+                                 prev_actions=prev_actions, hidden=hidden)
         module_out = module_out.view(-1, c_lat, h_lat, w_lat)
 
         # Skip connection around intermediate module
@@ -98,12 +105,13 @@ class SeqRedNetResizeWrapper(nn.Module):
         self.resize = resize
         self.stabilize = stabilize
 
-    def forward(self, rgb, depth, hidden=None):
+    def forward(self, rgb, depth, prev_actions, hidden=None):
         r"""
             Args:
                 Raw sensor inputs.
                 rgb: B x seq_len x H=256 x W=256 x 3
                 depth: B x seq_len x H x W x 1
+                prev_actions: B x seq_len
             Returns:
                 semantic: drop-in replacement for default semantic sensor. B x H x W  (no channel, for some reason)
         """
@@ -127,7 +135,7 @@ class SeqRedNetResizeWrapper(nn.Module):
         # depth_clip = ((depth < 1.0) & (depth > 0.0)).squeeze(1)
         depth = self.semmap_depth_norm(depth)
         with torch.no_grad():
-            scores, hidden = self.rednet_rnn(rgb, depth, hidden=hidden)
+            scores, hidden = self.rednet_rnn(rgb, depth, prev_actions, hidden=hidden)
             pred = (torch.max(scores, 2)[1] + 1).float() # B x L x 480 x 640
         if self.stabilize: # downsample tiny
             # Mask out out of depth samples
