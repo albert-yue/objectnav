@@ -238,7 +238,7 @@ class RedNet(nn.Module):
         out = self.final_deconv_custom(x)
 
         if self.training:
-            return out, out2, out3, out4, out5
+            return out, last_layer, out2, out3, out4, out5
 
         return out, last_layer
 
@@ -247,9 +247,9 @@ class RedNet(nn.Module):
         fuses = self.forward_downsample(rgb, depth)
 
         # We only need predictions.
-        # features_encoder = fuses[-1]
+        features_encoder = fuses[-1]
         # scores, features_lastlayer = self.forward_upsample(*fuses)
-        scores, *_ = self.forward_upsample(*fuses)
+        scores, last_layer, *_ = self.forward_upsample(*fuses)
         # debug_tensor('scores', scores)
         # return features_encoder, features_lastlayer, scores
         return scores
