@@ -25,14 +25,21 @@ def save_ckpt(ckpt_dir, model, optimizer, global_step, epoch, local_count, num_t
     print('{:>2} has been successfully saved'.format(path))
 
 
-def load_ckpt(model, optimizer, model_file, device):
+def load_ckpt(model, optimizer, model_file, device, prefix=None):
     if os.path.isfile(model_file):
         print("=> loading checkpoint '{}'".format(model_file))
         if device.type == 'cuda':
             checkpoint = torch.load(model_file)
         else:
             checkpoint = torch.load(model_file, map_location=lambda storage, loc: storage)
-        model.load_state_dict(checkpoint['state_dict'])
+        
+        state_dict = checkpoint['state_dict']
+        if prefix:
+            state_dict = {
+                (k[len(prefix):] if k[:len(prefix)] == prefix else k): v for k, v in state_dict.items()
+            } 
+        model.load_state_dict(state_dict)
+        
         if optimizer:
             optimizer.load_state_dict(checkpoint['optimizer'])
         print("=> loaded checkpoint '{}' (epoch {})"

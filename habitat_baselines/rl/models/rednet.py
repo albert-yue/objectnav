@@ -70,7 +70,7 @@ class RedNet(nn.Module):
         self.final_conv = self._make_transpose(transblock, 64, 3)
 
         self.final_deconv_custom = nn.ConvTranspose2d(self.inplanes, num_classes, kernel_size=2,
-                                               stride=2, padding=0, bias=True)
+                                                      stride=2, padding=0, bias=True)
 
         self.out5_conv_custom = nn.Conv2d(256, num_classes, kernel_size=1, stride=1, bias=True)
         self.out4_conv_custom = nn.Conv2d(128, num_classes, kernel_size=1, stride=1, bias=True)
@@ -89,8 +89,6 @@ class RedNet(nn.Module):
         elif isinstance(m, nn.BatchNorm2d):
             m.weight.data.fill_(1)
             m.bias.data.zero_()
-
-
 
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None

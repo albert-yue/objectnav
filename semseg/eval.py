@@ -9,7 +9,6 @@ import datetime
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
-from torch.optim.lr_scheduler import LambdaLR
 import torchvision.transforms
 from torchmetrics import JaccardIndex
 from tensorboardX import SummaryWriter
@@ -51,7 +50,7 @@ val_loader = DataLoader(val_data, batch_size=args.batch_size, shuffle=False,
 num_val = len(val_data)
 
 
-model = SeqRedNet(RedNetRNNModule(), freeze_encoder=args.freeze_rednet, pretrained=False)
+model = SeqRedNet(RedNetRNNModule())
 
 if torch.cuda.device_count() > 1:
     print("Let's use", torch.cuda.device_count(), "GPUs!")
@@ -59,18 +58,17 @@ if torch.cuda.device_count() > 1:
 model.eval()
 model.to(device)
 
-if args.last_ckpt:
-    global_step, args.start_epoch = load_ckpt(model, None, args.last_ckpt, device)
-
+if args.ckpt:
+    global_step, args.start_epoch = load_ckpt(model, None, args.ckpt, device, prefix='module.')
+    print('Loading ckpt from', args.ckpt)
 
 loss_fn = CrossEntropyLoss2d()
 loss_fn.to(device)
 val_loss = 0.0
 
 iou_fn = JaccardIndex(num_classes=40, reduction='sum')
+iou_fn.to(device)
 miou = 0.0
-
-flag = True
 
 with torch.no_grad():
     for batch_idx, sample in enumerate(val_loader):
@@ -79,16 +77,18 @@ with torch.no_grad():
         prev_actions = sample['actions'].to(device)
         target = sample['semantic'].to(device)
         
-        if flag:
-            print('Target size:', target.size())
-            flag = False
-
         pred, _ = model(image, depth, prev_actions)  # drops the hidden states
         loss = loss_fn([pred], [target])
         val_loss += loss.detach() * image.size(0) / num_val
 
-        _, c, h, w = pred.size()
-        miou += iou_fn(pred.view(-1, c, h, w), target.view(-1, h, w)) / num_val
+        _, _, c, h, w = pred.size()
+        mask = target > 0
+        mask_neg = target < 0
+        targets_m = target.clone().to(device)
+        targets_m[mask] -= 1
+        targets_m[mask_neg] += c
+        miou += iou_fn(pred.view(-1, c, h, w), targets_m.long().view(-1, h, w)) / (args.seq_len * num_val)
 
 print('Val CrossEntropyLoss:', val_loss)
 print('mIoU', miou)
+
