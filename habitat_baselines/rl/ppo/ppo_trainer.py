@@ -96,6 +96,8 @@ class Diagnostics:
     """
     visual_observations = "visual_observations"
 
+    semantic_scores = "semantic_scores"
+
     # Note, we don't record preprocessed visual observations, but we prob don't need them.
 
     # Following three are typically for probing
@@ -1463,6 +1465,18 @@ class PPOTrainer(BaseRLTrainer):
                 list(x) for x in zip(*outputs)
             ]
 
+            batch = batch_obs(observations, device=self.device)
+            if self.semantic_predictor is not None:
+                # batch["gt_semantic"] = batch["semantic"]
+                batch["semantic"], semantic_scores = self.semantic_predictor(batch["rgb"], batch["depth"], return_scores=True)
+                if ppo_cfg.POLICY.EVAL_SEMANTICS_CKPT == "weights/rednet_semmap_mp3d_40.pth":
+                    batch["semantic"] -= 1
+                if len(self.config.VIDEO_OPTION) > 0:
+                    for i in range(batch["semantic"].size(0)):
+                        # observations[i]['gt_semantic'] = observations[i]['semantic']
+                        observations[i]['semantic'] = batch["semantic"][i].cpu().numpy()
+            batch = apply_obs_transforms_batch(batch, self.obs_transforms)
+
             if len(log_diagnostics) > 0:
                 for i in range(self.envs.num_envs):
                     if Diagnostics.actions in log_diagnostics:
@@ -1488,6 +1502,8 @@ class PPOTrainer(BaseRLTrainer):
                         d_stats[Diagnostics.visual_observations][i].append({
                             key: batch[key][i].cpu() for key in ['rgb', 'depth', 'semantic'] # HWC
                         })
+                    if Diagnostics.semantic_scores in log_diagnostics:
+                        d_stats[Diagnostics.semantic_scores][i].append(semantic_scores[i])
                     if Diagnostics.sge_t in log_diagnostics:
                         d_stats[Diagnostics.sge_t][i].append(infos[i]['goal_vis'])
                     if Diagnostics.collisions_t in log_diagnostics:
@@ -1505,18 +1521,6 @@ class PPOTrainer(BaseRLTrainer):
                         })
                     if Diagnostics.d2g in log_diagnostics:
                         d_stats[Diagnostics.d2g][i].append(infos[i]['distance_to_goal'])
-
-            batch = batch_obs(observations, device=self.device)
-            if self.semantic_predictor is not None:
-                # batch["gt_semantic"] = batch["semantic"]
-                batch["semantic"] = self.semantic_predictor(batch["rgb"], batch["depth"])
-                if ppo_cfg.POLICY.EVAL_SEMANTICS_CKPT == "weights/rednet_semmap_mp3d_40.pth":
-                    batch["semantic"] -= 1
-                if len(self.config.VIDEO_OPTION) > 0:
-                    for i in range(batch["semantic"].size(0)):
-                        # observations[i]['gt_semantic'] = observations[i]['semantic']
-                        observations[i]['semantic'] = batch["semantic"][i].cpu().numpy()
-            batch = apply_obs_transforms_batch(batch, self.obs_transforms)
 
             not_done_masks = torch.tensor(
                 [[False] if done else [True] for done in dones],

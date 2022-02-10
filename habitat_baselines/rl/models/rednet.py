@@ -384,7 +384,7 @@ class RedNetResizeWrapper(nn.Module):
         self.resize = resize
         self.stabilize = stabilize
 
-    def forward(self, rgb, depth):
+    def forward(self, rgb, depth, return_scores=False):
         r"""
             Args:
                 Raw sensor inputs.
@@ -419,6 +419,8 @@ class RedNetResizeWrapper(nn.Module):
         if self.resize:
             pred = F.interpolate(pred.unsqueeze(1), (og_h, og_w), mode='nearest')
 
+        if return_scores:
+            return pred.long().squeeze(1), scores
         return pred.long().squeeze(1)
 
 def load_rednet(device, ckpt="", resize=True, stabilize=False):

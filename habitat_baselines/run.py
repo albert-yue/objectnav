@@ -256,7 +256,7 @@ def run_exp(
             # Also record probing information
             log_diagnostics = [
                 Diagnostics.basic, Diagnostics.internal_activations, Diagnostics.observations,
-                Diagnostics.visual_observations,
+                Diagnostics.visual_observations, Diagnostics.semantic_scores,
                 Diagnostics.actions, Diagnostics.episode_info, Diagnostics.weights,
                 Diagnostics.d2g, Diagnostics.room_cat, Diagnostics.visit_count,
                 Diagnostics.collisions_t, Diagnostics.coverage_t, Diagnostics.sge_t
