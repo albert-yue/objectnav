@@ -19,6 +19,9 @@ from habitat.utils.visualizations import maps
 
 cv2 = try_cv2_import()
 
+
+SEMANTIC_PALETTE_SIZE = 45
+
 def make_rgb_palette(n=40):
     HSV_tuples = [(x*1.0/n, 0.8, 0.8) for x in range(n)]
     RGB_map = np.array(list(map(lambda x: colorsys.hsv_to_rgb(*x), HSV_tuples)))
@@ -169,8 +172,8 @@ AUX_ABBREV = {
 
 def save_semantic_frame(sem_arr, label):
     semantic_map = sem_arr.squeeze()
-    colors = make_rgb_palette(42)
-    semantic_colors = colors[semantic_map % 42] * 255
+    colors = make_rgb_palette(SEMANTIC_PALETTE_SIZE)
+    semantic_colors = colors[semantic_map % SEMANTIC_PALETTE_SIZE] * 255
     semantic_colors = semantic_colors.astype(np.uint8)
     imageio.imwrite(f"{label}.png", semantic_colors)
 
@@ -208,19 +211,23 @@ def observations_to_image(observation: Dict, info: Dict, reward, weights_output=
     # TODO add in ground truth semantics as well, maybe?
     if "semantic" in observation:
         semantic_map = observation["semantic"].squeeze()
-        colors = make_rgb_palette(45)
-        semantic_colors = colors[semantic_map % 45] * 255
+        colors = make_rgb_palette(SEMANTIC_PALETTE_SIZE)
+        semantic_colors = colors[semantic_map % SEMANTIC_PALETTE_SIZE] * 255
         semantic_colors = semantic_colors.astype(np.uint8)
 
         egocentric_view.append(semantic_colors)
-        if "gt_semantic" in observation:
-            gt_semantic_map = observation["gt_semantic"].squeeze()
-            gt_semantic_colors = colors[gt_semantic_map % 45] * 255
-            gt_semantic_colors = gt_semantic_colors.astype(np.uint8)
+        # if "gt_semantic" in observation:
+        #     gt_semantic_map = observation["gt_semantic"].squeeze()
+        #     gt_semantic_colors = colors[gt_semantic_map % SEMANTIC_PALETTE_SIZE] * 255
+        #     gt_semantic_colors = gt_semantic_colors.astype(np.uint8)
 
-            # actually, do half half so that we can see seams.
-            egocentric_view[-1][:len(gt_semantic_colors)//2] = gt_semantic_colors[:len(gt_semantic_colors) // 2]
-            # egocentric_view.append(gt_semantic_colors)
+        #     # actually, do half half so that we can see seams.
+        #     egocentric_view[-1][:len(gt_semantic_colors)//2] = gt_semantic_colors[:len(gt_semantic_colors) // 2]
+        #     # egocentric_view.append(gt_semantic_colors)
+        goal_category = np.array(task_cat2mpcat40)[observation["objectgoal"]]
+        detected_goal = (semantic_map == goal_category).astype(np.uint8) * 255
+        detected_goal = np.repeat(detected_goal[:, :, np.newaxis], 3, axis=2)
+        egocentric_view.append(detected_goal)
 
     # add image goal if observation has image_goal info
     if "imagegoal" in observation:
@@ -233,19 +240,23 @@ def observations_to_image(observation: Dict, info: Dict, reward, weights_output=
     assert (
         len(egocentric_view) > 0
     ), "Expected at least one visual sensor enabled."
-    egocentric_view = np.concatenate(egocentric_view, axis=1)
+    if len(egocentric_view) > 1 and all([v.shape == egocentric_view[0].shape for v in egocentric_view]):
+        h, w, c = egocentric_view[0].shape
+        frame = np.zeros((h * ((len(egocentric_view)+1) // 2), w*2, c), dtype=np.uint8)
+        for i, v in enumerate(egocentric_view):
+            frame[h*(i//2):h*(i//2+1), w*(i%2):w*(i%2+1)] = v
+    else:
+        frame = np.concatenate(egocentric_view, axis=1)
 
     # draw collision
     if "collisions" in info and info["collisions"]["is_collision"]:
-        egocentric_view = draw_collision(egocentric_view)
-
-    frame = egocentric_view
+        frame = draw_collision(frame)
 
     if "top_down_map" in info:
         top_down_map = maps.colorize_draw_agent_and_fit_to_height(
-            info["top_down_map"], egocentric_view.shape[0]
+            info["top_down_map"], frame.shape[0]
         )
-        frame = np.concatenate((egocentric_view, top_down_map), axis=1)
+        frame = np.concatenate((frame, top_down_map), axis=1)
 
     SHOW_ANNOTATIONS = False
     SHOW_ANNOTATIONS = True
@@ -279,7 +290,7 @@ def observations_to_image(observation: Dict, info: Dict, reward, weights_output=
 
     if weights_output is not None and len(aux_tasks) > 1 and False: # * Pass
         # add a strip to the right of the video
-        strip_height = egocentric_view.shape[0] # ~256 -> we'll have 5-10 tasks, let's do 24 pixels each
+        strip_height = frame.shape[0] # ~256 -> we'll have 5-10 tasks, let's do 24 pixels each
         strip_gap = 24
         strip_width = strip_gap + 12
         strip = np.ones((strip_height, strip_width, 3), dtype=np.uint8) * 255 # white bg
