@@ -39,6 +39,9 @@ class TrajectoryDataset(Dataset):
         self.trajectories = []
         self.envs = train_envs if self.phase_train else test_envs
         for env in self.envs:
+            if not os.path.isdir(os.path.join(data_dir, env)):
+                continue
+
             for traj in os.listdir(os.path.join(data_dir, env)):
                 self.trajectories.append(os.path.join(data_dir, env, traj))
         self.num_trajectories = len(self.trajectories)
