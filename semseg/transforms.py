@@ -7,7 +7,7 @@ import skimage.transform
 class Normalize(object):
     def __call__(self, sample):
         rgb, depth = sample['rgb'], sample['depth']
-        rgb = rgb / 255
+        rgb = rgb / 255.0
         rgb = torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                                  std=[0.229, 0.224, 0.225])(rgb)
         depth = torchvision.transforms.Normalize(mean=[0.213],
@@ -22,21 +22,24 @@ class Interpolate:
     """Interpolate up 240x320 for now"""
 
     def __call__(self, sample):
-        return {'rgb': F.interpolate(sample['rgb'], (480, 640), mode='bilinear'),
-                'depth': F.interpolate(sample['depth'], (480, 640), mode='nearest'),
-                'semantic': F.interpolate(sample['semantic'].unsqueeze(1), (480, 640), mode='nearest').squeeze(1),
-                'semantic2': F.interpolate(sample['semantic2'].unsqueeze(1), (240, 320), mode='nearest').squeeze(1),
-                'semantic3': F.interpolate(sample['semantic3'].unsqueeze(1), (120, 160), mode='nearest').squeeze(1),
-                'semantic4': F.interpolate(sample['semantic4'].unsqueeze(1), (60, 80), mode='nearest').squeeze(1),
-                'semantic5': F.interpolate(sample['semantic5'].unsqueeze(1), (30, 40), mode='nearest').squeeze(1),
-                'actions': sample['actions']}
+        out = {'rgb': F.interpolate(sample['rgb'], (480, 640), mode='bilinear'),
+               'depth': F.interpolate(sample['depth'], (480, 640), mode='nearest'),
+               'semantic': F.interpolate(sample['semantic'].unsqueeze(1), (480, 640), mode='nearest').squeeze(1),
+               'semantic2': F.interpolate(sample['semantic2'].unsqueeze(1), (240, 320), mode='nearest').squeeze(1),
+               'semantic3': F.interpolate(sample['semantic3'].unsqueeze(1), (120, 160), mode='nearest').squeeze(1),
+               'semantic4': F.interpolate(sample['semantic4'].unsqueeze(1), (60, 80), mode='nearest').squeeze(1),
+               'semantic5': F.interpolate(sample['semantic5'].unsqueeze(1), (30, 40), mode='nearest').squeeze(1),
+        }
+        if 'actions' in sample:
+            out['actions'] = sample['actions']
+        return out
 
 
 class ToTensor(object):
     """Convert ndarrays in sample to Tensors."""
 
     def __call__(self, sample):
-        rgb, depth, semantic, actions = sample['rgb'], sample['depth'], sample['semantic'], sample['actions']
+        rgb, depth, semantic = sample['rgb'], sample['depth'], sample['semantic']
 
         # Generate different semantic scales
         l, h, w = semantic.shape
@@ -64,11 +67,14 @@ class ToTensor(object):
         # torch image: L x C X H X W
         rgb = rgb.transpose(0, 3, 1, 2)
         depth = depth.transpose(0, 3, 1, 2)
-        return {'rgb': torch.from_numpy(rgb).float(),
-                'depth': torch.from_numpy(depth).float(),
-                'semantic': torch.from_numpy(semantic).float(),
-                'semantic2': torch.from_numpy(semantic2).float(),
-                'semantic3': torch.from_numpy(semantic3).float(),
-                'semantic4': torch.from_numpy(semantic4).float(),
-                'semantic5': torch.from_numpy(semantic5).float(),
-                'actions': torch.from_numpy(actions).long()}
+        out = {'rgb': torch.from_numpy(rgb).float(),
+               'depth': torch.from_numpy(depth).float(),
+               'semantic': torch.from_numpy(semantic).float(),
+               'semantic2': torch.from_numpy(semantic2).float(),
+               'semantic3': torch.from_numpy(semantic3).float(),
+               'semantic4': torch.from_numpy(semantic4).float(),
+               'semantic5': torch.from_numpy(semantic5).float(),
+        }
+        if 'actions' in sample:
+            out['actions'] = torch.from_numpy(sample['actions']).long()
+        return out
