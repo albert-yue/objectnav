@@ -9,6 +9,7 @@ import os
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+from torchvision.datasets import VisionDataset
 
 
 train_envs = [
@@ -29,7 +30,49 @@ ACTIONS_MAP = {act: i for i, act in enumerate(ACTIONS)}
 
 keys = ['rgb', 'depth', 'semantic',]# 'objectgoal', 'compass', 'gps']
 
+
+class FrameDataset(VisionDataset):
+    def __init__(self, data_dir, transforms=None, phase='train'):
+        super().__init__(data_dir, transforms=transforms)
+        self.data_dir = data_dir
+        self.transforms = transforms
+        self.phase = phase
+
+        self.envs = train_envs if self.phase == 'train' else test_envs
+        self.count_per_env = []  # counts are in same order as self.envs
+        for env in self.envs:
+            if not os.path.isdir(os.path.join(data_dir, env)):
+                self.count_per_env.append(0)
+                continue
+            
+            files = os.listdir(os.path.join(data_dir, env))
+            num_frames = len([f for f in files if f.startswith('depth') and os.path.splitext(f)[1] == '.npy'])
+            self.count_per_env.append(num_frames)
+    
+    def __len__(self):
+        return sum(self.count_per_env)
+
+    def __getitem__(self, index):
+        for env, cnt in zip(self.envs, self.count_per_env):
+            if cnt > index:
+                sample_env, sample_idx = env, index
+                break
+            else:
+                index -= cnt
+        
+        sample = {
+            out_name: np.load(os.path.join(self.data_dir, sample_env, '{}_{:04d}.npy'.format(out_name, sample_idx)))
+            for out_name in ['rgb', 'depth', 'semantic']
+        }
+
+        if self.transforms:
+            sample = self.transforms(sample)
+        
+        return sample
+
+
 class TrajectoryDataset(Dataset):
+    #TODO: rename transform to transforms to align with VisionDataset naming
     def __init__(self, data_dir, seq_len=500, transform=None, phase_train=True):
         self.data_dir = data_dir
         self.seq_len = seq_len
