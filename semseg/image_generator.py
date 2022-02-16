@@ -85,7 +85,6 @@ class ImageGenerator:
         for i in range(num_images):
             # Set agent location
             sim.initialize_agent(cfg.sim_cfg.default_agent_id)
-            print(cfg.sim_cfg.default_agent_id)
 
             # Generate sample
             obs = sim.get_sensor_observations()
@@ -123,6 +122,9 @@ class ImageGenerator:
 
             samples.append(sample)
         
+        sim.close()
+        del sim
+
         return samples
     
     def set_seed(self, seed=None):
@@ -205,8 +207,8 @@ class ImageGenerator:
 if __name__ == '__main__':
     from semseg.dataset import train_envs
 
-    scene_filepaths = ['../habitat-lab/data/scene_datasets/mp3d/{s}/{s}.glb'.format(s=scene) for scene in train_envs[:1]]
-    # scene_filepaths = ['../habitat-lab/data/scene_datasets/mp3d/{s}/{s}.glb'.format(s=scene) for scene in train_envs]
+    # scene_filepaths = ['../habitat-lab/data/scene_datasets/mp3d/{s}/{s}.glb'.format(s=scene) for scene in train_envs[:1]]
+    scene_filepaths = ['../habitat-lab/data/scene_datasets/mp3d/{s}/{s}.glb'.format(s=scene) for scene in train_envs]
     
     generator = ImageGenerator(
         scene_filepaths,
@@ -215,4 +217,4 @@ if __name__ == '__main__':
         seed=0,
         save_dir='data/semseg/frames',
     )
-    generator.generate_images(1, save=True, save_image=True)
+    generator.generate_images(1792, save=True, save_image=False)
