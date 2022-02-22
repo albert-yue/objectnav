@@ -9,7 +9,7 @@ class CrossEntropyLoss2d(nn.Module):
     def forward(self, inputs_scales, targets_scales):
         losses = []
         for inputs, targets in zip(inputs_scales, targets_scales):
-            _, _, c, h, w = inputs.size()
+            *_, c, h, w = inputs.size()
             inputs = inputs.view(-1, c, h, w)
             targets = targets.view(-1, h, w)
 
