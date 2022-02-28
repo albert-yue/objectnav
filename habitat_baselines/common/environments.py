@@ -323,3 +323,24 @@ class DummyRLEnv(habitat.RLEnv):
 
     def get_info(self, observations):
         return self.habitat_env.get_metrics()
+
+@baseline_registry.register_env(name="SemanticShuffledDummyRLEnv")
+class SemanticShuffledDummyRLEnv(DummyRLEnv):
+    def __init__(self, config: Config, dataset: Optional[Dataset]):
+        self.semantic_shuffle = None  # order to shuffle the semantic channels
+        super().__init__(config, dataset)
+
+    def reset(self):
+        obs = super().reset()
+        # 40 is the number of classes
+        self.semantic_shuffle = np.arange(1, 41)
+        np.random.shuffle(self.semantic_shuffle)
+        # subtract 1 as semantic classes are 1-indexed while array indices are 0-indexed
+        obs['semantic'] = self.semantic_shuffle[obs['semantic']-1]
+        return obs
+
+    def step(self, *args, **kwargs):
+        obs, reward, done, info = super().step(*args, **kwargs)
+        obs['semantic'] = self.semantic_shuffle[obs['semantic']-1]
+        return obs, reward, done, info
+
