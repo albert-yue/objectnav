@@ -103,114 +103,114 @@ def build_parser():
     return parser
 
 
-print('Start time:', datetime.datetime.now())
-parser = build_parser()
-args = parser.parse_args()
+if __name__ == '__main__':
+    print('Start time:', datetime.datetime.now())
+    parser = build_parser()
+    args = parser.parse_args()
 
-writer = SummaryWriter(args.summary_dir)
+    writer = SummaryWriter(args.summary_dir)
 
-device = torch.device("cuda:0" if args.cuda and torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if args.cuda and torch.cuda.is_available() else "cpu")
 
-# total_gb = torch.cuda.get_device_properties(0).total_memory / 1000000000
-# print('Total CUDA memory:', '{0:.2f}'.format(total_gb), 'GB')
+    # total_gb = torch.cuda.get_device_properties(0).total_memory / 1000000000
+    # print('Total CUDA memory:', '{0:.2f}'.format(total_gb), 'GB')
 
-print('Building dataset...')
-transform = torchvision.transforms.Compose([
-    torchvision.transforms.Lambda(lambda sample: {k: torchvision.transforms.ToTensor()(v) for k, v in sample.items()}),
-    Normalize()
-])
-train_data = FrameDataset(args.data_dir, phase='train', transforms=transform)
-train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True,
-                          num_workers=args.workers, pin_memory=False)
-num_train = len(train_data)
+    print('Building dataset...')
+    transform = torchvision.transforms.Compose([
+        torchvision.transforms.Lambda(lambda sample: {k: torchvision.transforms.ToTensor()(v) for k, v in sample.items()}),
+        Normalize()
+    ])
+    train_data = FrameDataset(args.data_dir, phase='train', transforms=transform)
+    train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True,
+                            num_workers=args.workers, pin_memory=False)
+    num_train = len(train_data)
 
-print('Dataset made')
-# print('reserved | allocated:', torch.cuda.memory_reserved(0), '|', torch.cuda.memory_allocated(0))
+    print('Dataset made')
+    # print('reserved | allocated:', torch.cuda.memory_reserved(0), '|', torch.cuda.memory_allocated(0))
 
-model = RedNetEnsemble(ensemble_size=args.ensemble_size)
-model.load_rednet(args.rednet_ckpt)
-if torch.cuda.device_count() > 1:
-    print("Let's use", torch.cuda.device_count(), "GPUs!")
-    model = nn.DataParallel(model)
-model.train()
-model.to(device)
+    model = RedNetEnsemble(ensemble_size=args.ensemble_size)
+    model.load_rednet(args.rednet_ckpt)
+    if torch.cuda.device_count() > 1:
+        print("Let's use", torch.cuda.device_count(), "GPUs!")
+        model = nn.DataParallel(model)
+    model.train()
+    model.to(device)
 
-# TODO(ayue): DistributedDataParallel
+    # TODO(ayue): DistributedDataParallel
 
-print('Model loaded')
-# print('reserved | allocated:', torch.cuda.memory_reserved(0), '|', torch.cuda.memory_allocated(0))
+    print('Model loaded')
+    # print('reserved | allocated:', torch.cuda.memory_reserved(0), '|', torch.cuda.memory_allocated(0))
 
-loss_fn = CrossEntropyLoss2d()
-loss_fn.to(device)
+    loss_fn = CrossEntropyLoss2d()
+    loss_fn.to(device)
 
-if args.freeze_rednet:
-    optimizer = torch.optim.SGD(model.ensemble.parameters(), lr=args.lr,
-                                momentum=args.momentum, weight_decay=args.weight_decay)
-else:
-    optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
-                                momentum=args.momentum, weight_decay=args.weight_decay)
+    if args.freeze_rednet:
+        optimizer = torch.optim.SGD(model.ensemble.parameters(), lr=args.lr,
+                                    momentum=args.momentum, weight_decay=args.weight_decay)
+    else:
+        optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
+                                    momentum=args.momentum, weight_decay=args.weight_decay)
 
-global_step = 0
+    global_step = 0
 
-if args.last_ckpt:
-    global_step, args.start_epoch = load_ckpt(model, optimizer, args.last_ckpt, device)
+    if args.last_ckpt:
+        global_step, args.start_epoch = load_ckpt(model, optimizer, args.last_ckpt, device)
 
-lr_decay_lambda = lambda epoch: args.lr_decay_rate ** (epoch // args.lr_epoch_per_decay)
-scheduler = LambdaLR(optimizer, lr_lambda=lr_decay_lambda)
+    lr_decay_lambda = lambda epoch: args.lr_decay_rate ** (epoch // args.lr_epoch_per_decay)
+    scheduler = LambdaLR(optimizer, lr_lambda=lr_decay_lambda)
 
-# print('Before training')
-# print('reserved | allocated:', torch.cuda.memory_reserved(0), '|', torch.cuda.memory_allocated(0))
+    # print('Before training')
+    # print('reserved | allocated:', torch.cuda.memory_reserved(0), '|', torch.cuda.memory_allocated(0))
 
-for epoch in range(int(args.start_epoch), args.epochs):
-    local_count = 0
-    last_count = 0
-    end_time = time.time()
-    if epoch % args.save_epoch_freq == 0 and epoch != args.start_epoch:
-        save_ckpt(args.ckpt_dir, model, optimizer, global_step, epoch,
-                    local_count, num_train)
+    for epoch in range(int(args.start_epoch), args.epochs):
+        local_count = 0
+        last_count = 0
+        end_time = time.time()
+        if epoch % args.save_epoch_freq == 0 and epoch != args.start_epoch:
+            save_ckpt(args.ckpt_dir, model, optimizer, global_step, epoch,
+                        local_count, num_train)
 
-    for batch_idx, sample in enumerate(train_loader):
-        # print('Epoch', epoch, 'Batch', batch_idx)
+        for batch_idx, sample in enumerate(train_loader):
+            # print('Epoch', epoch, 'Batch', batch_idx)
 
-        # print('RGB:', sample['rgb'].size(), sample['rgb'].dtype)
-        # print('Dep:', sample['depth'].size(), sample['depth'].dtype)
-        # print('Sem:', sample['semantic'].size(), sample['semantic'].dtype)
+            # print('RGB:', sample['rgb'].size(), sample['rgb'].dtype)
+            # print('Dep:', sample['depth'].size(), sample['depth'].dtype)
+            # print('Sem:', sample['semantic'].size(), sample['semantic'].dtype)
 
-        optimizer.zero_grad()
+            optimizer.zero_grad()
 
-        image = sample['rgb'].to(device)
-        depth = sample['depth'].to(device)
-        # print('reserved | allocated:', torch.cuda.memory_reserved(0), '|', torch.cuda.memory_allocated(0))
-        target = sample['semantic'].to(device)
-        target[target == 0] = 40  # merge void, misc, and unlabeled labels
-        target[target == 41] = 40
-        target = [target for _ in range(args.ensemble_size)]
-        # print('Range:', target[0].min(), target[0].max())
-        # print('Target size:', target[0].size())
+            image = sample['rgb'].to(device)
+            depth = sample['depth'].to(device)
+            # print('reserved | allocated:', torch.cuda.memory_reserved(0), '|', torch.cuda.memory_allocated(0))
+            target = sample['semantic'].to(device)
+            target[target == 0] = 40  # merge void, misc, and unlabeled labels
+            target[target == 41] = 40
+            target = [target for _ in range(args.ensemble_size)]
+            # print('Range:', target[0].min(), target[0].max())
+            # print('Target size:', target[0].size())
 
-        # print('reserved | allocated:', torch.cuda.memory_reserved(0), '|', torch.cuda.memory_allocated(0))
+            # print('reserved | allocated:', torch.cuda.memory_reserved(0), '|', torch.cuda.memory_allocated(0))
 
-        preds = model(image, depth)
-        loss = loss_fn(preds, target)
-        loss.backward()
-        optimizer.step()
-        scheduler.step()
+            preds = model(image, depth)
+            loss = loss_fn(preds, target)
+            loss.backward()
+            optimizer.step()
+            scheduler.step()
 
-        local_count += image.detach().shape[0]
-        global_step += 1
-        if global_step % args.print_freq == 0 or global_step == 1:
-            time_inter = time.time() - end_time
-            count_inter = local_count - last_count
-            print_log(global_step, epoch, local_count, count_inter,
-                        num_train, loss.detach(), time_inter)
-            end_time = time.time()
+            local_count += image.detach().shape[0]
+            global_step += 1
+            if global_step % args.print_freq == 0 or global_step == 1:
+                time_inter = time.time() - end_time
+                count_inter = local_count - last_count
+                print_log(global_step, epoch, local_count, count_inter,
+                            num_train, loss.detach(), time_inter)
+                end_time = time.time()
 
-            writer.add_scalar('CrossEntropyLoss', loss.detach(), global_step=global_step)
-            writer.add_scalar('Learning rate', scheduler.get_last_lr()[0], global_step=global_step)
-            last_count = local_count
+                writer.add_scalar('CrossEntropyLoss', loss.detach(), global_step=global_step)
+                writer.add_scalar('Learning rate', scheduler.get_last_lr()[0], global_step=global_step)
+                last_count = local_count
 
-save_ckpt(args.ckpt_dir, model, optimizer, global_step, args.epochs, 0, num_train)
+    save_ckpt(args.ckpt_dir, model, optimizer, global_step, args.epochs, 0, num_train)
 
-print("Training completed.")
-print(datetime.datetime.now())
-
+    print("Training completed.")
+    print(datetime.datetime.now())
