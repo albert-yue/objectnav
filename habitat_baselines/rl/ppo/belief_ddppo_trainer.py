@@ -29,7 +29,8 @@ from habitat_baselines.rl.ddppo.algo.ddp_utils import (
     EXIT,
     REQUEUE,
     add_signal_handlers,
-    init_distrib_slurm,
+    get_dist_info_supercloud,
+    init_distrib_supercloud,
     load_interrupted_state,
     requeue_job,
     save_interrupted_state,
@@ -65,7 +66,7 @@ class BeliefDDPPOTrainer(DDPPOTrainer):
         Returns:
             None
         """
-        self.local_rank, tcp_store = init_distrib_slurm(
+        self.local_rank, tcp_store = init_distrib_supercloud(
             self.config.RL.DDPPO.distrib_backend
         )
         add_signal_handlers()
@@ -76,8 +77,9 @@ class BeliefDDPPOTrainer(DDPPOTrainer):
         )
         num_rollouts_done_store.set("num_done", "0")
 
-        self.world_rank = distrib.get_rank()
-        self.world_size = distrib.get_world_size()
+        world_rank, world_size = get_dist_info_supercloud()
+        self.world_rank = world_rank
+        self.world_size = world_size
 
         random.seed(self.config.TASK_CONFIG.SEED + self.world_rank)
         np.random.seed(self.config.TASK_CONFIG.SEED + self.world_rank)

@@ -173,6 +173,58 @@ def init_distrib_slurm(
 
     return local_rank, tcp_store
 
+
+def get_dist_info_supercloud():
+    '''
+    Gets the world rank and size on MIT Supercloud
+
+    Taken from Supercloud's PyTorch distributed example:
+    https://github.com/llsc-supercloud/teaching-examples/tree/master/Python/pytorch/Distributed
+    '''
+    if 'OMPI_COMM_WORLD_SIZE' in os.environ:
+        world_size = int(os.getenv('OMPI_COMM_WORLD_SIZE'))
+    else:
+        world_size = int(os.getenv('SLURM_NTASKS'))
+
+    if 'OMPI_COMM_WORLD_RANK' in os.environ:
+        global_rank = int(os.getenv('OMPI_COMM_WORLD_RANK'))
+    else:
+        global_rank = int(os.getenv('SLURM_PROCID'))
+    return global_rank, world_size
+
+
+def init_distrib_supercloud(
+    backend: str = "nccl",
+) -> Tuple[int, torch.distributed.TCPStore]:
+    r"""Initializes distributed for MIT Supercloud.
+
+    :param backend: Which torch.distributed backend to use
+
+    :returns: Tuple of the local_rank (aka which GPU to use for this process)
+        and the TCPStore used for the rendezvous
+    """
+    assert (
+        torch.distributed.is_available()
+    ), "torch.distributed must be available"
+
+    # These should be set in your .sh script, 
+    master_port = int(os.environ.get("MASTER_PORT"))
+    master_addr = os.environ.get("MASTER_ADDR")
+
+    world_rank, world_size = get_dist_info_supercloud()
+    # Each node has 2 gpus
+    local_rank = world_rank % 2
+
+    tcp_store = distrib.TCPStore(
+        master_addr, master_port, world_size, world_rank == 0
+    )
+    distrib.init_process_group(
+        backend, store=tcp_store, rank=world_rank, world_size=world_size
+    )
+
+    return local_rank, tcp_store
+
+
 @overload
 def rank0_only() -> bool:
     ...
