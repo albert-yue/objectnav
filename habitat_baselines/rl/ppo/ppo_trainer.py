@@ -31,6 +31,7 @@ from habitat_baselines.common.baseline_registry import baseline_registry
 from habitat_baselines.common.env_utils import construct_envs
 from habitat_baselines.common.environments import get_env_class
 from habitat_baselines.common.auxiliary_tasks import get_aux_task_classes
+from habitat_baselines.rl.models.ensemble import load_rednet_ensemble
 from habitat_baselines.rl.ppo.curiosity import ForwardCuriosity
 from habitat_baselines.rl.models.rednet import load_rednet
 from habitat_baselines.common.rollout_storage import RolloutStorage
@@ -339,7 +340,8 @@ class PPOTrainer(BaseRLTrainer):
 
         self.semantic_predictor = None
         if self.config.RL.POLICY.TRAIN_PRED_SEMANTICS:
-            self.semantic_predictor = load_rednet(
+            self.semantic_predictor = load_rednet_ensemble(
+                10,  # ensemble_size
                 self.device,
                 ckpt=ppo_cfg.POLICY.EVAL_SEMANTICS_CKPT,
                 resize=True # since we train on half-vision

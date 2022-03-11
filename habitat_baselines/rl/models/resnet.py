@@ -3,7 +3,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates.
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from typing import List, Dict, Optional
+from typing import List, Dict, Union, Optional
 from math import ceil
 import numpy as np
 import torch
@@ -361,7 +361,7 @@ class ResNetEncoder(nn.Module):
     ):
         for mode in use_if_available:
             assert mode in ["rgb", "depth", "semantic"] # enum check
-        self.semantic_embedder: Optional[nn.Embedding] = None
+        self.semantic_embedder: Optional[Union[nn.Embedding, nn.Linear]] = None
         self.mock_semantics = mock_semantics
         super().__init__()
 
@@ -384,6 +384,9 @@ class ResNetEncoder(nn.Module):
                 # self.semantic_embedder = nn.Embedding(sem_space.high[0, 0] - sem_space.low[0, 0] + 1, SEMANTIC_EMBEDDING_SIZE)
                 self.semantic_embedder = nn.Embedding(40 + 2, SEMANTIC_EMBEDDING_SIZE) # 40 from matterport paper (+2 just in case, 40 is crashing)
                 self._input_sizes[i] = SEMANTIC_EMBEDDING_SIZE
+
+                # for rednet ensemble output: B x 2*n_classes x H x W (used as B x H x W 2*n_classes here)
+                self.semantic_embedder = nn.Linear(2*40, SEMANTIC_EMBEDDING_SIZE)
             else:
                 self._input_sizes[i] = observation_space.spaces[mode].shape[2]
 
@@ -450,7 +453,7 @@ class ResNetEncoder(nn.Module):
 
     def forward(self, observations: Dict[str, torch.Tensor], mock_semantics: bool = False) -> torch.Tensor:
         r"""
-            observations: str-keyed B x C x H x W
+            observations: str-keyed B x H x W x C observations
         """
         # if self.is_blind:
         #     return None
@@ -465,7 +468,7 @@ class ResNetEncoder(nn.Module):
                         .unsqueeze(-1).expand(*mode_obs.size(), SEMANTIC_EMBEDDING_SIZE)
                 else:
                     categories = mode_obs.long() + 1 # offset -1 -> 0 since embedding can't handle it
-                    mode_obs = self.semantic_embedder(categories) # b x h x w -> b x h x w x H
+                    mode_obs = self.semantic_embedder(categories) # b x h x w -> b x h x w x E
 
                 # mode_obs = mode_obs.flatten(start_dim=3)
             # permute tensor to dimension [BATCH x CHANNEL x HEIGHT X WIDTH]

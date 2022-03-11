@@ -37,7 +37,8 @@ class RolloutStorage:
             self.observations['semantic'] = torch.zeros(
                 num_steps + 1,
                 num_envs,
-                *observation_space.spaces['depth'].shape[:2] # No channel dimension
+                *observation_space.spaces['depth'].shape[:2], # No channel dimension
+                2*40
             )
 
         # * Note: these modules are hidden in the rollout, i.e. if an architecture uses one module the rollout API does not expect the module dimension
