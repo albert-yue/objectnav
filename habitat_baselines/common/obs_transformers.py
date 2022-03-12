@@ -135,8 +135,8 @@ class ResizeShortestEdge(ObservationTransformer):
         if self._size is not None:
             def transform_sensor(key):
                 raw = observations[key]
-                if key == 'semantic':
-                    raw = raw.unsqueeze(-1)
+                # if key == 'semantic':
+                #     raw = raw.unsqueeze(-1)
                 changed = self._transform_obs(raw, mode=self._mode_map[key])
                 return changed.squeeze(-1) if key == 'semantic' else changed
             observations.update(

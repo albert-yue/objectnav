@@ -350,7 +350,14 @@ class BeliefPolicy(Policy):
         if self.mock_objectnav:
             return torch.zeros(observations["semantic"].size(0), 1, device=self.device, dtype=next(self.parameters()).dtype)
         if "semantic" in observations and "objectgoal" in observations:
-            obj_semantic = observations["semantic"].flatten(start_dim=1)
+            semantic = observations["semantic"]  # B x H x W x 2C
+
+            # Get actual predictions via mean pred
+            mean_probs = semantic[:, :semantic.size(3)//2]
+            final_pred = torch.max(mean_probs, dim=1)[1]
+
+            #obj_semantic = observations["semantic"].flatten(start_dim=1)
+            obj_semantic = final_pred.flatten(start_dim=1)
             idx = self.task_cat2mpcat40[
                 observations["objectgoal"].long()
             ]

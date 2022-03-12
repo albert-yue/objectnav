@@ -80,8 +80,8 @@ class RedNetEnsembleResizeWrapper(nn.Module):
         """
         if self.resize:
             _, og_h, og_w, _ = rgb.size() # b h w c
-        # rgb = rgb.permute(0, 3, 1, 2)
-        # depth = depth.permute(0, 3, 1, 2)
+        rgb = rgb.permute(0, 3, 1, 2)
+        depth = depth.permute(0, 3, 1, 2)
 
         rgb = rgb.float() / 255
         if self.resize:
@@ -104,7 +104,7 @@ class RedNetEnsembleResizeWrapper(nn.Module):
         #     # pred = F.interpolate(pred.unsqueeze(1), (15, 20), mode='nearest').squeeze(1)
         if self.resize:
             b, m, c, h, w = scores.size()
-            scores = F.interpolate(scores.view(-1, c, h, w), (og_h, og_w), mode='bilinear').view(b, m, c, og_h, og_w)
+            scores = F.interpolate(scores.view(-1, c, h, w), (og_h, og_w), mode='bilinear', align_corners=False).view(b, m, c, og_h, og_w)
 
         # Calculate prediction probabilities. Mean and std of prob to avoid issues from arbitrary scaling in logit space
         probs = F.softmax(scores, dim=2)

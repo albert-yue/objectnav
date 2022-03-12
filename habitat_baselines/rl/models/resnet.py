@@ -382,7 +382,7 @@ class ResNetEncoder(nn.Module):
             if mode == "semantic":
                 # sem_space = observation_space.spaces["semantic"]
                 # self.semantic_embedder = nn.Embedding(sem_space.high[0, 0] - sem_space.low[0, 0] + 1, SEMANTIC_EMBEDDING_SIZE)
-                self.semantic_embedder = nn.Embedding(40 + 2, SEMANTIC_EMBEDDING_SIZE) # 40 from matterport paper (+2 just in case, 40 is crashing)
+                # self.semantic_embedder = nn.Embedding(40 + 2, SEMANTIC_EMBEDDING_SIZE) # 40 from matterport paper (+2 just in case, 40 is crashing)
                 self._input_sizes[i] = SEMANTIC_EMBEDDING_SIZE
 
                 # for rednet ensemble output: B x 2*n_classes x H x W (used as B x H x W 2*n_classes here)
@@ -467,8 +467,9 @@ class ResNetEncoder(nn.Module):
                     mode_obs = torch.zeros_like(mode_obs, dtype=next(self.parameters()).dtype)\
                         .unsqueeze(-1).expand(*mode_obs.size(), SEMANTIC_EMBEDDING_SIZE)
                 else:
-                    categories = mode_obs.long() + 1 # offset -1 -> 0 since embedding can't handle it
-                    mode_obs = self.semantic_embedder(categories) # b x h x w -> b x h x w x E
+                    # categories = mode_obs.long() + 1 # offset -1 -> 0 since embedding can't handle it
+                    # mode_obs = self.semantic_embedder(categories) # b x h x w -> b x h x w x E
+                    mode_obs = self.semantic_embedder(mode_obs)  # b x h x w x 2C -> b x h x w E
 
                 # mode_obs = mode_obs.flatten(start_dim=3)
             # permute tensor to dimension [BATCH x CHANNEL x HEIGHT X WIDTH]
