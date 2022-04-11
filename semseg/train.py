@@ -19,7 +19,7 @@ from tensorboardX import SummaryWriter
 from habitat_baselines.rl.models.rednet_rnn import SeqRedNet, RedNetRNNModule
 from semseg.dataset import TrajectoryDataset
 from semseg.loss import CrossEntropyLoss2d
-from semseg.transforms import ToTensor, Normalize
+from semseg.transforms_rednet import ToTensor, Normalize
 from semseg.utils import print_log, save_ckpt, load_ckpt
 
 
@@ -87,6 +87,11 @@ train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True,
                           num_workers=args.workers, pin_memory=False)
 num_train = len(train_data)
 
+val_data = TrajectoryDataset(args.data_dir, seq_len=args.seq_len, phase_train=False, transform=transform)
+val_loader = DataLoader(val_data, batch_size=args.batch_size, shuffle=False,
+                        num_workers=args.workers, pin_memory=False)
+num_val = len(val_data)
+
 # print('Dataset made')
 # print('reserved | allocated:', torch.cuda.memory_reserved(0), '|', torch.cuda.memory_allocated(0))
 
@@ -138,6 +143,8 @@ scheduler = LambdaLR(optimizer, lr_lambda=lr_decay_lambda)
 # print('reserved | allocated:', torch.cuda.memory_reserved(0), '|', torch.cuda.memory_allocated(0))
 
 for epoch in range(int(args.start_epoch), args.epochs):
+    model.train()
+
     local_count = 0
     last_count = 0
     end_time = time.time()
@@ -148,7 +155,7 @@ for epoch in range(int(args.start_epoch), args.epochs):
     for batch_idx, sample in enumerate(train_loader):
         # print('Epoch', epoch, 'Batch', batch_idx)
         optimizer.zero_grad()
-               
+
         image = sample['rgb'].to(device)
         depth = sample['depth'].to(device)
         prev_actions = sample['actions'].to(device)
@@ -187,6 +194,24 @@ for epoch in range(int(args.start_epoch), args.epochs):
             writer.add_scalar('CrossEntropyLoss', loss.detach(), global_step=global_step)
             writer.add_scalar('Learning rate', scheduler.get_last_lr()[0], global_step=global_step)
             last_count = local_count
+
+    model.eval()
+    val_loss = 0.0
+    with torch.no_grad():
+        for batch_idx, sample in enumerate(val_loader):
+            image = sample['rgb'].to(device)
+            depth = sample['depth'].to(device)
+            prev_actions = sample['actions'].to(device)
+            
+            target = sample['semantic'].to(device)
+
+            pred, _ = model(image, depth, prev_actions)  # drops the hidden states
+            loss = loss_fn([pred], [target])
+            val_loss = loss.detach() * image.size(0) / num_val # i.e. * batch_size 
+
+    if epoch % args.save_epoch_freq == 0 and epoch != args.start_epoch:
+        print('Epoch: {:>3} Val Loss: {:.6f}'.format(epoch, val_loss))
+        writer.add_scalar('Val CrossEntropyLoss', val_loss, global_step=epoch)
 
 save_ckpt(args.ckpt_dir, model, optimizer, global_step, args.epochs, 0, num_train)
 

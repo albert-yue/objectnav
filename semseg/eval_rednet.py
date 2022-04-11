@@ -15,7 +15,7 @@ from torchmetrics import JaccardIndex
 from habitat_baselines.rl.models.rednet import RedNet
 from semseg.dataset import TrajectoryDataset
 from semseg.loss import CrossEntropyLoss2d
-from semseg.transforms import ToTensor, Normalize
+from semseg.transforms_rednet import ToTensor, Normalize
 
 
 def build_parser():

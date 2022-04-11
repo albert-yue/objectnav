@@ -16,7 +16,7 @@ from tensorboardX import SummaryWriter
 from habitat_baselines.rl.models.rednet_rnn import SeqRedNet, RedNetRNNModule
 from semseg.dataset import TrajectoryDataset
 from semseg.loss import CrossEntropyLoss2d
-from semseg.transforms import ToTensor, Normalize
+from semseg.transforms_rednet import ToTensor, Normalize
 from semseg.utils import print_log, save_ckpt, load_ckpt
 
 

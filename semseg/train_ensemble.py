@@ -14,7 +14,7 @@ from tensorboardX import SummaryWriter
 from habitat_baselines.rl.models.ensemble import RedNetEnsemble
 from semseg.dataset import FrameDataset
 from semseg.loss import CrossEntropyLoss2d
-from semseg.transforms import ToTensor, Normalize
+from semseg.transforms_rednet import ToTensor, Normalize
 from semseg.utils import print_log, save_ckpt, load_ckpt
 
 
@@ -107,7 +107,7 @@ if __name__ == '__main__':
     loss_fn.to(device)
 
     if args.freeze_rednet:
-        optimizer = torch.optim.SGD(model.ensemble.parameters(), lr=args.lr,
+        optimizer = torch.optim.SGD(model.module.ensemble.parameters(), lr=args.lr,
                                     momentum=args.momentum, weight_decay=args.weight_decay)
     else:
         optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,

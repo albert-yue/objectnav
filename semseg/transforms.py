@@ -1,80 +1,99 @@
 import torch
 import torch.nn.functional as F
-import torchvision
-import skimage.transform
+import torchvision.transforms
+import torchvision.transforms.functional as TF
 
-# Transforms on torch.*Tensor
-class Normalize(object):
+
+IMAGE_KEYS = ['rgb', 'depth', 'semantic']
+
+class Compose:
+    def __init__(self, transforms, image_keys=None):
+        self.transforms = transforms
+    
     def __call__(self, sample):
-        rgb, depth = sample['rgb'], sample['depth']
-        rgb = rgb / 255.0
-        rgb = torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                                 std=[0.229, 0.224, 0.225])(rgb)
-        depth = torchvision.transforms.Normalize(mean=[0.213],
-                                                 std=[0.285])(depth)
-        sample['rgb'] = rgb
-        sample['depth'] = depth
-
+        '''
+        sample (dict): data sample, str-keyed. Some of the values
+            should be arrays representing images
+        '''
+        for t in self.transforms:
+            sample = t(sample)
         return sample
 
 
-class Interpolate:
-    """Interpolate up 240x320 for now"""
+class ToTensor:
+    '''
+    Converts images (mainly in our case HxWxC np.ndarrays) to tensors
+    Also moves the channel dim ahead of the HxW dims -> CxHxW
+    '''
+    def __init__(self, image_keys=None):
+        self.image_keys = image_keys
+        if image_keys is None:
+            self.image_keys = IMAGE_KEYS
 
     def __call__(self, sample):
-        out = {'rgb': F.interpolate(sample['rgb'], (480, 640), mode='bilinear'),
-               'depth': F.interpolate(sample['depth'], (480, 640), mode='nearest'),
-               'semantic': F.interpolate(sample['semantic'].unsqueeze(1), (480, 640), mode='nearest').squeeze(1),
-               'semantic2': F.interpolate(sample['semantic2'].unsqueeze(1), (240, 320), mode='nearest').squeeze(1),
-               'semantic3': F.interpolate(sample['semantic3'].unsqueeze(1), (120, 160), mode='nearest').squeeze(1),
-               'semantic4': F.interpolate(sample['semantic4'].unsqueeze(1), (60, 80), mode='nearest').squeeze(1),
-               'semantic5': F.interpolate(sample['semantic5'].unsqueeze(1), (30, 40), mode='nearest').squeeze(1),
-        }
-        if 'actions' in sample:
-            out['actions'] = sample['actions']
-        return out
+        for k in self.image_keys:
+            sample[k] = TF.to_tensor(sample[k])
+        return sample
 
 
-class ToTensor(object):
-    """Convert ndarrays in sample to Tensors."""
+class RandomHorizontalFlip:
+    def __init__(self, p=0.5, image_keys=None):
+        self.p = p
+        self.image_keys = image_keys
+        if image_keys is None:
+            self.image_keys = IMAGE_KEYS
+    
+    def __call__(self, sample):
+        if torch.rand(1) < self.p:
+            for k in self.image_keys:
+                sample[k] = TF.hflip(sample[k])
+        return sample
+
+
+class RandomResizedCrop:
+    def __init__(self, size, scale=(0.2, 1.0), ratio=(3./4., 4./3.), image_keys=None):
+        self.size = size
+        self.scale = scale
+        self.ratio = ratio
+        self.image_keys = image_keys
+        if image_keys is None:
+            self.image_keys = IMAGE_KEYS
 
     def __call__(self, sample):
-        rgb, depth, semantic = sample['rgb'], sample['depth'], sample['semantic']
+        if len(self.image_keys) > 0:
+            params = torchvision.transforms.RandomResizedCrop.get_params(sample[self.image_keys[0]], self.scale, self.ratio)
+            for k in self.image_keys:
+                sample[k] = TF.resized_crop(sample[k], *params, size=self.size)
+        return sample
 
-        # Generate different semantic scales
-        l, h, w = semantic.shape
-        semantic = semantic.transpose((1, 2, 0))
-        semantic2 = skimage.transform.resize(
-            semantic, (semantic.shape[0] // 2, semantic.shape[1] // 2),
-            order=0, mode='reflect', preserve_range=True
-        ).transpose((2, 0, 1))
-        semantic3 = skimage.transform.resize(
-            semantic, (semantic.shape[0] // 4, semantic.shape[1] // 4),
-            order=0, mode='reflect', preserve_range=True
-        ).transpose((2, 0, 1))
-        semantic4 = skimage.transform.resize(
-            semantic, (semantic.shape[0] // 8, semantic.shape[1] // 8),
-            order=0, mode='reflect', preserve_range=True
-        ).transpose((2, 0, 1))
-        semantic5 = skimage.transform.resize(
-            semantic, (semantic.shape[0] // 16, semantic.shape[1] // 16),
-            order=0, mode='reflect', preserve_range=True
-        ).transpose((2, 0, 1))
-        semantic = semantic.transpose((2, 0, 1))
 
-        # swap color axis because
-        # numpy image: L x H x W x C
-        # torch image: L x C X H X W
-        rgb = rgb.transpose(0, 3, 1, 2)
-        depth = depth.transpose(0, 3, 1, 2)
-        out = {'rgb': torch.from_numpy(rgb).float(),
-               'depth': torch.from_numpy(depth).float(),
-               'semantic': torch.from_numpy(semantic).float(),
-               'semantic2': torch.from_numpy(semantic2).float(),
-               'semantic3': torch.from_numpy(semantic3).float(),
-               'semantic4': torch.from_numpy(semantic4).float(),
-               'semantic5': torch.from_numpy(semantic5).float(),
-        }
-        if 'actions' in sample:
-            out['actions'] = torch.from_numpy(sample['actions']).long()
-        return out
+class GaussianNoise:
+    def __init__(self, mean=0., std=1., image_keys=None):
+        self.mean = mean
+        self.std = std        
+        self.image_keys = image_keys
+        if image_keys is None:
+            self.image_keys = IMAGE_KEYS
+        
+    def __call__(self, sample): 
+        for k in self.image_keys:
+            sample[k].add_( torch.randn(sample[k].size()) * self.std + self.mean )
+        return sample
+    
+    def __repr__(self):
+        return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
+
+
+class Clip:
+    def __init__(self, low=0., high=1., image_keys=None):
+        self.low = low
+        self.high = high
+        self.image_keys = image_keys
+        if image_keys is None:
+            self.image_keys = IMAGE_KEYS
+
+    def __call__(self, sample):
+        for k in self.image_keys:
+            sample[k] = torch.clamp(sample[k], self.low, self.high)
+        return sample
+
