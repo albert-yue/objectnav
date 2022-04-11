@@ -56,6 +56,7 @@ from habitat_baselines.rl.ppo import (
 from habitat_baselines.rl.ppo.encoder_dict import (
     get_vision_encoder_inputs
 )
+from semseg.success_classifier import SuccessGTClassifier
 
 class Diagnostics:
     basic = "basic" # dummy to record episode stats (for t-test)
@@ -1253,6 +1254,7 @@ class PPOTrainer(BaseRLTrainer):
         num_eval_runs=1,
         skip_log=False,
         simple_eval=False,
+        use_stopping_module=False,
     ) -> None:
         r"""Evaluates a single checkpoint.
 
@@ -1264,6 +1266,10 @@ class PPOTrainer(BaseRLTrainer):
         Returns:
             None
         """
+        self.stopping_module = None
+        if use_stopping_module:
+            self.stopping_module = SuccessGTClassifier()
+
         self._projections = None
         ckpt_dict = self.load_checkpoint(checkpoint_path, map_location="cpu")
         # Config
@@ -1419,6 +1425,9 @@ class PPOTrainer(BaseRLTrainer):
 
         pbar = tqdm.tqdm(total=number_of_eval_episodes * num_eval_runs)
 
+        false_pos_actions = [2, 2, 2]  # turn left 3 times
+        false_pos = torch.fill(self.config.NUM_PROCESSES, -1)
+
         while (
             len(stats_episodes) < number_of_eval_episodes * num_eval_runs
             and self.envs.num_envs > 0
@@ -1455,6 +1464,20 @@ class PPOTrainer(BaseRLTrainer):
                     behavioral_index=self.behavioral_index,
                     return_all_activations=Diagnostics.internal_activations in log_diagnostics,
                 )
+
+                # false_pos has int counts: -1 - behave as normal, 0+ - saw false pos that #steps ago
+                if 'semantic' in batch and self.stopping_module is not None:
+                    # check for false positive stops
+                    pred_success = self.stopping_module(observations['semantic'])  # nx2
+                    pred_success = torch.argmax(pred_success, dim=-1)
+                    false_pos[actions == 0 and pred_success == 0] = 0
+                    
+                    # change actions for recent false stops
+                    for t, forced_a in enumerate(false_pos_actions):
+                        actions[false_pos == t] = forced_a
+                    false_pos[false_pos >= 0] += 1
+                    false_pos[false_pos == len(false_pos_actions)] = -1
+
                 prev_actions.copy_(actions)
 
                 if self.config.EVAL.PROJECT_OUT >= 0:
