@@ -17,6 +17,7 @@ from habitat_baselines.rl.models.ensemble import load_rednet_ensemble
 from habitat_baselines.rl.models.rednet import load_rednet
 from semseg.mpcat40 import mpcat40
 from semseg.resnet import resnet18
+import semseg.transforms as ss_transforms
 
 
 category_to_index = {obj[1]: obj[0] for obj in mpcat40}
@@ -32,9 +33,11 @@ def make_loader():
         sem[sem == 0] = 40
         sem[sem == 41] = 40
         sem = sem-1
+        sem = np.eye(40)[sem]  # convert to one hot 480 x 640 x 40
         sample['semantic'] = sem
 
-        sample['semantics_rednet'] = sample['semantics_rednet'] - 1
+        # move channel dim to end: 480 x 640 x 40 (height, width, n_categories)
+        sample['semantics_rednet'] = (sample['semantics_rednet'] - 1).transpose(1, 2, 0)
         
         ### Object category
         if 'object_category' not in sample:
@@ -81,6 +84,38 @@ class SuccessGTClassifier(nn.Module):
         return x
 
 
+class SuccessClassifier(nn.Module):
+    def __init__(self, n_categories=40):
+        super().__init__()
+        sem_embed_size = 4
+        goal_embed_size = 4
+
+        self.semantic_embedder = nn.Linear(n_categories, sem_embed_size)
+        self.goal_embedder = nn.Embedding(n_categories, goal_embed_size)
+        self.backbone = resnet18(sem_embed_size)
+        self.fc = nn.Sequential(
+            nn.Linear(1000+4, 64),
+            nn.ReLU(),
+            nn.Linear(64, 2)
+        )
+
+    def forward(self, x, category):
+        '''
+        x: (BxHxW)
+        category: target object category: (B)
+        '''
+        x = x.permute(0, 2, 3, 1)  # move channel dim to end for "embedder"
+        x = self.semantic_embedder(x)
+        x = x.permute(0, 3, 1, 2)
+        x = self.backbone(x)
+
+        goal_embed = self.goal_embedder(category)
+        x = torch.cat([x, goal_embed], dim=1)
+        x = self.fc(x)
+
+        return x
+
+
 class SuccessEnsembleClassifier(nn.Module):
     def __init__(self, n_categories=40):
         super().__init__()
@@ -99,11 +134,12 @@ class SuccessEnsembleClassifier(nn.Module):
 
     def forward(self, x, category):
         '''
-        x: (BxHxW)
+        x: (batch (B) x 2*num_categories (2*C) x H x W): mean and std of ensemble predictions across all semantic categories
         category: target object category: (B)
         '''
+        x = x.permute(0, 2, 3, 1)  # move channel dim to end for "embedder"
         x = self.semantic_embedder(x)
-        x = x.permute(0, 3, 1, 2)
+        x = x.permute(0, 3, 1, 2)  # move channel dim back up for ResNet backbone
         x = self.backbone(x)
 
         goal_embed = self.goal_embedder(category)
@@ -114,7 +150,7 @@ class SuccessEnsembleClassifier(nn.Module):
 
 
 if __name__ == '__main__':
-    num_epochs = 200
+    num_epochs = 100
     mode = sys.argv[1] # 'gt', 'ngt', 'ensemble'(TODO)
     if mode == 'gt':
         sem_key = 'semantic'
@@ -126,8 +162,18 @@ if __name__ == '__main__':
     print('Mode:', mode)
 
     device = torch.device('cuda:0')
-    
-    dataset = DatasetFolder('data/semseg/stopping_small/', loader=make_loader(), extensions=('.pkl',))
+
+    image_keys = ['rgb', 'depth', 'semantic', 'semantics_rednet', 'semantics_ensemble']
+    image_keys = ['rgb', 'depth', 'semantics_ensemble']
+    transforms = torchvision.transforms.Compose([
+        ss_transforms.ToTensor(image_keys),
+        ss_transforms.RandomHorizontalFlip(0.5, image_keys),
+        ss_transforms.RandomResizedCrop((480, 640), scale=(0.75, 1.0), ratio=(1., 1.), image_keys=image_keys),
+        ss_transforms.GaussianNoise(0, 0.003, image_keys),
+        ss_transforms.Clip(image_keys=image_keys)
+    ])
+
+    dataset = DatasetFolder('data/semseg/stopping_small/', loader=make_loader(), extensions=('.pkl',), transform=transforms)
     rng = torch.Generator().manual_seed(42)
     num_train = int(0.8 * len(dataset))
     num_val = len(dataset) - num_train
@@ -151,7 +197,7 @@ if __name__ == '__main__':
     if mode == 'ensemble':
         model = SuccessEnsembleClassifier()
     else:
-        model = SuccessGTClassifier()
+        model = SuccessClassifier()
     model.to(device)
     model.train()
 
